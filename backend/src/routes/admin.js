@@ -29,16 +29,16 @@ router.get('/plans', async (_req, res, next) => {
 
 router.post('/plans', async (req, res, next) => {
   try {
-    const { name, price, durationDays, transactionLimit, merchantLimit, apiAccess, transactionFeePercent, features, active } = req.body;
+    const { name, price, durationDays, transactionLimit, merchantLimit, apiAccess, transactionFeePercent, features, active, popular } = req.body;
     if (!name || Number(price) < 0 || Number(durationDays) < 1) return res.status(400).json({ status: false, message: 'name, price and durationDays are required' });
-    const plan = await Plan.create({ name, price, durationDays, transactionLimit, merchantLimit, apiAccess, transactionFeePercent, features, active });
+    const plan = await Plan.create({ name, price, durationDays, transactionLimit, merchantLimit, apiAccess, transactionFeePercent, features, active, popular });
     res.status(201).json({ status: true, plan });
   } catch (error) { next(error); }
 });
 
 router.put('/plans/:id', async (req, res, next) => {
   try {
-    const allowed = ['name', 'price', 'durationDays', 'transactionLimit', 'merchantLimit', 'apiAccess', 'transactionFeePercent', 'features', 'active'];
+    const allowed = ['name', 'price', 'durationDays', 'transactionLimit', 'merchantLimit', 'apiAccess', 'transactionFeePercent', 'features', 'active', 'popular'];
     const patch = Object.fromEntries(allowed.filter((key) => key in req.body).map((key) => [key, req.body[key]]));
     const plan = await Plan.findByIdAndUpdate(req.params.id, patch, { new: true, runValidators: true });
     if (!plan) return res.status(404).json({ status: false, message: 'Plan not found' });
