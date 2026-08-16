@@ -6,7 +6,6 @@ import GatewaySettings from '../models/GatewaySettings.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
-router.use(requireAuth);
 
 router.get('/plans', async (_req, res, next) => {
   try {
@@ -32,7 +31,7 @@ function buildPaymentLink(template, { amount, orderId, planName }) {
   return link;
 }
 
-router.post('/purchase', async (req, res, next) => {
+router.post('/purchase', requireAuth, async (req, res, next) => {
   try {
     const plan = await Plan.findOne({ _id: req.body.planId, active: true });
     if (!plan) return res.status(404).json({ status: false, message: 'Plan not found or inactive' });
@@ -50,30 +49,12 @@ router.post('/purchase', async (req, res, next) => {
     });
     if (!paymentUrl) return res.status(503).json({ status: false, message: 'Invalid subscription payment link configuration' });
 
-    const order = await SubscriptionOrder.create({
-      user: req.auth.sub,
-      plan: plan._id,
-      orderId,
-      amount: plan.price,
-      paymentUrl
-    });
-
-    res.status(201).json({
-      status: true,
-      order: {
-        id: order._id,
-        orderId,
-        amount: order.amount,
-        paymentUrl,
-        plan: plan.name,
-        durationDays: plan.durationDays,
-        status: order.status
-      }
-    });
+    const order = await SubscriptionOrder.create({ user: req.auth.sub, plan: plan._id, orderId, amount: plan.price, paymentUrl });
+    res.status(201).json({ status: true, order: { id: order._id, orderId, amount: order.amount, paymentUrl, plan: plan.name, durationDays: plan.durationDays, status: order.status } });
   } catch (error) { next(error); }
 });
 
-router.get('/me', async (req, res, next) => {
+router.get('/me', requireAuth, async (req, res, next) => {
   try {
     const user = await (await import('../models/User.js')).default.findById(req.auth.sub).populate('plan');
     const active = !!user?.plan && !!user?.trialEndsAt ? user.trialEndsAt > new Date() : !!user?.plan;
