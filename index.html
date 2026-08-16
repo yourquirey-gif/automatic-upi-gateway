@@ -1,39 +1,67 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="description" content="Automatic UPI Payment Gateway">
-  <title>UPI Gateway — Secure Merchant Portal</title>
-  <link rel="stylesheet" href="./gateway.css">
-  <link rel="stylesheet" href="./auth.css">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Seox UPI Payments Gateway for Modern Businesses">
+<title>Seox — UPI Payments Gateway</title>
+<link rel="stylesheet" href="./gateway.css">
+<link rel="stylesheet" href="./auth.css">
 </head>
 <body>
-  <div class="shell">
-    <aside id="sidebar" class="sidebar">
-      <div class="brand"><span>U</span><b>UPI Gateway</b></div>
-      <nav id="nav">
-        <button class="active" data-page="Dashboard">⌂ <span>Dashboard</span></button>
-        <button data-page="Merchants">▣ <span>Merchants</span></button>
-        <button data-page="Payment Links">↗ <span>Payment Links</span></button>
-        <button data-page="Transactions">▤ <span>Transactions</span></button>
-        <button data-page="API & Webhooks">⌘ <span>API & Webhooks</span></button>
-        <button data-page="Security">◈ <span>Security</span></button>
-        <button data-page="Settings">⚙ <span>Settings</span></button>
-      </nav>
-      <div class="plan"><b>Starter Plan</b><small>Gateway access active</small><div class="bar"><i></i></div><small>Usage <strong>42%</strong></small></div>
-    </aside>
-    <main class="main">
-      <header>
-        <button id="menu" class="menu" aria-label="Open menu">☰</button>
-        <div>Merchant Panel <em>/</em> <b id="crumb">Dashboard</b></div>
-        <div class="account">● <b>Merchant</b></div>
-      </header>
-      <section id="app" class="content"></section>
-    </main>
+<div class="landing">
+<header class="site-header">
+  <button class="logo" onclick="location.href='./index.html'" aria-label="Seox home"><span class="logo-mark">ϟ</span><span>Seox</span></button>
+  <nav class="site-nav" id="siteNav">
+    <button onclick="scrollToSection('features')">Features</button>
+    <button onclick="scrollToSection('pricing')">Pricing</button>
+    <button onclick="openAuth('login')" class="nav-login">Login</button>
+    <button onclick="openAuth('signup')" class="nav-signup">Sign Up</button>
+  </nav>
+  <button class="mobile-menu" onclick="toggleSiteNav()" aria-label="Open menu">☰</button>
+</header>
+
+<section class="hero-section">
+  <div class="hero-glow glow-one"></div><div class="hero-glow glow-two"></div>
+  <div class="hero-copy">
+    <span class="pill"><span>●</span> Trusted UPI Payment Infrastructure</span>
+    <h1>UPI <em>Payments</em><br>Gateway for Modern Businesses</h1>
+    <p>Experience the next generation of payment processing with our elite UPI gateway. Fast, secure, and designed for scale.</p>
+    <div class="hero-actions">
+      <button class="gradient-btn" onclick="openAuth('signup')">🚀 Start Free Trial</button>
+      <button class="light-btn" onclick="showTestPayment()">▶ Test Payment</button>
+    </div>
+    <div class="metrics"><div><strong>99.9%</strong><span>UPTIME</span></div><div><strong>2M+</strong><span>TRANSACTIONS</span></div><div><strong>50ms</strong><span>PROCESSING</span></div></div>
   </div>
-  <script src="./gateway.js"></script>
-  <script>window.AUTH_BASE_URL=window.AUTH_BASE_URL||'';</script>
-  <script src="./auth.js"></script>
+  <div class="payment-card-wrap">
+    <div class="payment-card"><div class="card-top"><div class="card-logo">▰</div><b>SEOX</b></div><div class="dots">•••• &nbsp; •••• &nbsp; •••• &nbsp; 4287</div><div class="card-bottom"><div><small>CARD HOLDER</small><strong>JOHN SMITH</strong></div><div><small>EXPIRES</small><strong>05/28</strong></div></div></div>
+  </div>
+</section>
+
+<section class="why-section" id="features"><div class="section-heading"><h2>Why Choose <em>Seox</em></h2><p>Built for businesses that need fast payments, strong security and clear real-time visibility.</p></div><div class="feature-grid">
+<div class="feature-card"><div class="feature-icon">ϟ</div><h3>Lightning Fast</h3><p>Process payments in milliseconds with optimized infrastructure and direct bank integrations.</p></div>
+<div class="feature-card"><div class="feature-icon">♢</div><h3>Bank-Level Security</h3><p>Strong encryption, secure authentication and advanced fraud protection for payment data.</p></div>
+<div class="feature-card"><div class="feature-icon">⌁</div><h3>Smart Analytics</h3><p>Gain valuable insights with real-time dashboards and customizable reporting tools.</p></div>
+</div></section>
+
+<section class="pricing-section" id="pricing"><div class="section-heading"><h2>Choose Your <em>Subscription Plan</em></h2><p>Select the perfect plan for your business needs. All plans include secure UPI payment integration.</p></div><div class="plans-grid">
+<div class="plan-card"><div class="plan-icon"><span class="fake-icon"><i class="card-chip"></i><i class="card-line"></i></span></div><h3>Starter</h3><div class="price">₹2,999.00 <small>/plan</small></div><div class="valid">▣ Valid for 3 Months</div><hr><div class="check">✓ <span>UPI Payment Integration</span></div><div class="check">✓ <span>Secure Payment Gateway</span></div><div class="check">✓ <span>24/7 Customer Support</span></div><div class="check">✓ <span>Transaction Analytics</span></div><button class="plan-btn" onclick="openAuth('signup')">Get Started</button></div>
+<div class="plan-card featured"><span class="popular">POPULAR</span><div class="plan-icon"><span class="fake-icon"><i class="card-chip"></i><i class="card-line"></i></span></div><h3>Business</h3><div class="price">₹5,999.00 <small>/plan</small></div><div class="valid">▣ Valid for 6 Months</div><hr><div class="check">✓ <span>UPI Payment Integration</span></div><div class="check">✓ <span>Secure Payment Gateway</span></div><div class="check">✓ <span>24/7 Customer Support</span></div><div class="check">✓ <span>Transaction Analytics</span></div><button class="plan-btn" onclick="openAuth('signup')">Get Started</button></div>
+<div class="plan-card"><div class="plan-icon">★</div><h3>Basic</h3><div class="price">₹999.00 <small>/plan</small></div><div class="valid">▣ Valid for 1 Month</div><hr><div class="check">✓ <span>UPI Payment Integration</span></div><div class="check">✓ <span>Secure Payment Gateway</span></div><div class="check">✓ <span>24/7 Customer Support</span></div><div class="check">✓ <span>Transaction Analytics</span></div><button class="plan-btn" onclick="openAuth('signup')">Get Started</button></div>
+<div class="plan-card"><div class="plan-icon">▦</div><h3>Enterprise</h3><div class="price">₹9,999.00 <small>/plan</small></div><div class="valid">▣ Valid for 12 Months</div><hr><div class="check">✓ <span>UPI Payment Integration</span></div><div class="check">✓ <span>Secure Payment Gateway</span></div><div class="check">✓ <span>24/7 Customer Support</span></div><div class="check">✓ <span>Transaction Analytics</span></div><button class="plan-btn" onclick="openAuth('signup')">Get Started</button></div>
+</div></section>
+
+<section class="steps-section"><div class="section-heading"><h2>Get Started in <em>Minutes</em></h2></div><div class="steps"><div class="step"><span>1</span><div><h3>Create Account</h3><p>Sign up for free and purchase your subscription plan in minutes.</p></div></div><div class="step"><span>2</span><div><h3>Integrate API</h3><p>Use our documented APIs, SDKs, or plugins for easy integration.</p></div></div><div class="step"><span>3</span><div><h3>Go Live</h3><p>Start accepting UPI payments from customers with a secure gateway.</p></div></div><div class="step"><span>4</span><div><h3>Scale & Grow</h3><p>Leverage advanced features and analytics as your business expands.</p></div></div></div></section>
+
+<section class="security-section"><div class="section-heading"><h2>Your Security is Our <em>Priority</em></h2><p>We employ multiple layers of security to help protect your transactions and data.</p></div><div class="security-grid"><div class="feature-card"><div class="feature-icon">▣</div><h3>End-to-End Encryption</h3><p>Data is protected in transit and at rest using modern security protocols.</p></div><div class="feature-card"><div class="feature-icon">♙</div><h3>2FA & Biometrics</h3><p>Multi-factor authentication and account security controls for enhanced protection.</p></div><div class="feature-card"><div class="feature-icon">✥</div><h3>AI Fraud Detection</h3><p>Intelligent systems help detect suspicious payment activity and reduce fraud.</p></div></div></section>
+
+<section class="cta-section"><h2>Ready to Transform Your<br>Payment Experience?</h2><p>Join businesses using Seox to accept payments faster, safer, and more efficiently.</p><button class="white-btn" onclick="openAuth('signup')">🚀 Get Started Today</button></section>
+<footer class="footer"><div class="footer-brand"><h2>Seox</h2><p>India's modern UPI payment gateway for businesses of all sizes. Secure, fast, and reliable.</p><div class="socials"><span>𝕏</span><span>f</span><span>in</span><span>◎</span></div></div><div class="footer-cols"><div><h3>Product</h3><button>Features</button><button>Pricing</button><button>Documentation</button></div><div><h3>Company</h3><button>About Us</button><button>Contact</button><button>Blog</button></div><div><h3>Support</h3><button>Help Center</button><button>Privacy Policy</button><button>Terms of Service</button></div></div><div class="copyright">© 2026 Seox. All rights reserved.</div></footer>
+<button class="chat-btn" onclick="alert('Support chat will be connected to your support number.')">◉ &nbsp; Chat with us</button>
+</div>
+<script src="./gateway.js"></script>
+<script>window.AUTH_BASE_URL=window.AUTH_BASE_URL||'';</script>
+<script src="./auth.js"></script>
+<script>function scrollToSection(id){document.getElementById(id)?.scrollIntoView({behavior:'smooth'});document.getElementById('siteNav')?.classList.remove('open')}function toggleSiteNav(){document.getElementById('siteNav')?.classList.toggle('open')}function showTestPayment(){alert('Test Payment demo will be connected to the payment checkout API.')}</script>
 </body>
 </html>
