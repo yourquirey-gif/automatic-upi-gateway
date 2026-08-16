@@ -11,6 +11,7 @@ import subscriptionRoutes from './routes/subscriptions.js';
 import accountRoutes from './routes/account.js';
 import kycRoutes from './routes/kyc.js';
 import kycConfigRoutes from './routes/kycConfig.js';
+import videoRoutes from './routes/videos.js';
 import User from './models/User.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import { verifyPendingOrdersForAdmin } from './services/gmailPaymentVerifier.js';
@@ -31,6 +32,7 @@ app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/account', accountRoutes);
 app.use('/api/v1/kyc', kycRoutes);
 app.use('/api/v1/kyc-config', kycConfigRoutes);
+app.use('/api/v1/videos', videoRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
