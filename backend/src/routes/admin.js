@@ -18,7 +18,7 @@ router.get('/settings', async (_req, res, next) => {
 
 router.put('/settings', async (req, res, next) => {
   try {
-    const allowed = ['settlementUpiId', 'settlementName', 'subscriptionUpiId', 'subscriptionUpiName', 'subscriptionPaymentLink', 'kycRequired', 'kycFee', 'kycUpiId', 'kycUpiName', 'showPanField', 'showAadhaarField', 'defaultTransactionFeePercent', 'gmailPaymentVerificationEnabled', 'gmailSearchQuery', 'paymentVerificationMode', 'feeSettlementMode'];
+    const allowed = ['settlementUpiId', 'settlementName', 'subscriptionUpiId', 'subscriptionUpiName', 'subscriptionPaymentLink', 'defaultTransactionFeePercent', 'gmailPaymentVerificationEnabled', 'gmailSearchQuery', 'paymentVerificationMode', 'feeSettlementMode'];
     const patch = Object.fromEntries(allowed.filter((key) => key in req.body).map((key) => [key, req.body[key]]));
     const settings = await GatewaySettings.findOneAndUpdate({ key: 'global' }, patch, { upsert: true, new: true, setDefaultsOnInsert: true });
     res.json({ status: true, settings });
@@ -56,8 +56,21 @@ router.delete('/plans/:id', async (req, res, next) => {
 
 router.get('/kyc', async (_req, res, next) => {
   try {
-    const requests = await KycOrder.find({ status: 'SUBMITTED' }).sort({ submittedAt: 1 }).populate('user', 'name email mobile companyName kycStatus').select('+aadhaarNumberEncrypted +aadhaarNameEncrypted +aadhaarFrontEncrypted +aadhaarBackEncrypted +panNumberEncrypted +panNameEncrypted +panFrontEncrypted +panBackEncrypted');
-    const result = requests.map(r => ({ id: r._id, orderId: r.orderId, amount: r.amount, status: r.status, submittedAt: r.submittedAt, paidAt: r.paidAt, user: r.user, aadhaar: { number: decryptSecret(r.aadhaarNumberEncrypted), name: decryptSecret(r.aadhaarNameEncrypted), front: decryptSecret(r.aadhaarFrontEncrypted), back: decryptSecret(r.aadhaarBackEncrypted) }, pan: { number: decryptSecret(r.panNumberEncrypted), name: decryptSecret(r.panNameEncrypted), front: decryptSecret(r.panFrontEncrypted), back: decryptSecret(r.panBackEncrypted) } }));
+    const requests = await KycOrder.find({ status: 'SUBMITTED' })
+      .sort({ submittedAt: 1 })
+      .populate('user', 'userId name email mobile companyName kycStatus')
+      .select('+aadhaarNumberEncrypted +aadhaarNameEncrypted +aadhaarFrontEncrypted +aadhaarBackEncrypted +panNumberEncrypted +panNameEncrypted +panFrontEncrypted +panBackEncrypted');
+    const result = requests.map(r => ({
+      id: r._id,
+      orderId: r.orderId,
+      amount: r.amount,
+      status: r.status,
+      submittedAt: r.submittedAt,
+      paidAt: r.paidAt,
+      user: r.user,
+      aadhaar: { number: decryptSecret(r.aadhaarNumberEncrypted), name: decryptSecret(r.aadhaarNameEncrypted), front: decryptSecret(r.aadhaarFrontEncrypted), back: decryptSecret(r.aadhaarBackEncrypted) },
+      pan: { number: decryptSecret(r.panNumberEncrypted), name: decryptSecret(r.panNameEncrypted), front: decryptSecret(r.panFrontEncrypted), back: decryptSecret(r.panBackEncrypted) }
+    }));
     res.json({ status: true, requests: result });
   } catch (error) { next(error); }
 });
