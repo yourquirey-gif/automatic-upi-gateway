@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import Transactions from './Transactions.jsx';
-import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CustomRoutes.jsx';
+import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CheckoutRoutesV2.jsx';
 import './styles.css';
 import './dashboard.css';
 
