@@ -23,6 +23,7 @@ app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'automatic-upi-gateway-api' }));
 app.get('/api/v1', (_req, res) => res.json({ name: 'Automatic UPI Gateway API', version: 'v1' }));
