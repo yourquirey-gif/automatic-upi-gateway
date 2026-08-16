@@ -1,4 +1,4 @@
-const API_BASE_URL=(window.API_BASE_URL||'https://seox.mooo.com').replace(/\/$/,'');
+const API_BASE_URL=(window.API_BASE_URL||'https://automatic-upi-gateway.onrender.com').replace(/\/$/,'');
 const AUTH_BASE_URL=window.AUTH_BASE_URL||API_BASE_URL;
 function apiUrl(path){return `${API_BASE_URL}${path.startsWith('/')?path:`/${path}`}`}
 function authUrl(mode){return `${AUTH_BASE_URL}/auth/google?mode=${encodeURIComponent(mode)}&return_to=${encodeURIComponent(location.href)}`}
