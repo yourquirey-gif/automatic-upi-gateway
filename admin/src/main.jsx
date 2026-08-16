@@ -1,9 +1,69 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { LayoutDashboard, Users, Store, Receipt, CreditCard, Settings, ShieldCheck } from 'lucide-react';
+import { CreditCard, LayoutDashboard, LogIn, Save, Settings, ShieldCheck, Trash2, WalletCards } from 'lucide-react';
+import { adminApi, adminLogin } from './api';
 import './styles.css';
 
-const items = [['Dashboard',LayoutDashboard],['Users',Users],['Merchants',Store],['Transactions',Receipt],['Plans',CreditCard],['Security',ShieldCheck],['Settings',Settings]];
-function App(){return <div className="admin"><aside><div className="brand"><b>U</b><strong>UPI Gateway</strong><em>ADMIN</em></div><nav>{items.map(([name,Icon],i)=><button className={i===0?'active':''} key={name}><Icon size={17}/>{name}</button>)}</nav></aside><main><header><div><small>ADMIN CONSOLE</small><h1>Dashboard</h1></div><div className="admin-user"><span>A</span><div><b>Administrator</b><small>System access</small></div></div></header><section><div className="cards"><Card title="Total Users" value="1,284" note="+8.2%"/><Card title="Active Merchants" value="936" note="+5.4%"/><Card title="Transactions" value="48,392" note="+14.7%"/><Card title="Processed Volume" value="₹18.42L" note="+11.3%"/></div><div className="panels"><div className="panel"><h2>System overview</h2><p>Live gateway metrics</p><div className="bars"><i style={{height:'48%'}}/><i style={{height:'68%'}}/><i style={{height:'54%'}}/><i style={{height:'82%'}}/><i style={{height:'74%'}}/><i style={{height:'91%'}}/><i style={{height:'78%'}}/></div></div><div className="panel"><h2>System status</h2><p>Services and integrations</p><Status name="API"/><Status name="Database"/><Status name="Webhooks"/><Status name="Merchant services"/></div></div></section></main></div>}
-function Card({title,value,note}){return <div className="card"><small>{title}</small><strong>{value}</strong><span>{note} <label>this month</label></span></div>};function Status({name}){return <div className="status"><span>{name}</span><b><i/>Operational</b></div>};
-createRoot(document.getElementById('root')).render(<App/>);
+const emptyPlan = { name: '', price: '', durationDays: 30, transactionFeePercent: 0, features: [], active: true };
+
+function App() {
+  const [token, setToken] = useState(localStorage.getItem('gateway_admin_token'));
+  if (!token) return <Login onLogin={setToken} />;
+  return <Console onLogout={() => { localStorage.removeItem('gateway_admin_token'); setToken(null); }} />;
+}
+
+function Login({ onLogin }) {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async e => {
+    e.preventDefault(); setBusy(true); setError('');
+    try { const data = await adminLogin(email, password); onLogin(data.token); }
+    catch (err) { setError(err.message || 'Login failed'); }
+    finally { setBusy(false); }
+  };
+  return <div className="admin-login"><form onSubmit={submit} className="login-card"><div className="login-logo">ϟ</div><h1>AutoGateway Admin</h1><p>Secure administrator access</p><label>Email<input type="email" value={email} onChange={e => setEmail(e.target.value)} required /></label><label>Password<input type="password" value={password} onChange={e => setPassword(e.target.value)} required /></label>{error && <div className="error">{error}</div>}<button className="primary" disabled={busy}><LogIn size={17}/>{busy ? 'Signing in…' : 'Login'}</button></form></div>;
+}
+
+function Console({ onLogout }) {
+  const [tab, setTab] = useState('plans');
+  const [plans, setPlans] = useState([]);
+  const [settings, setSettings] = useState({ subscriptionPaymentLink: '', settlementUpiId: '', settlementName: '' });
+  const [editing, setEditing] = useState(null);
+  const [draft, setDraft] = useState(emptyPlan);
+  const [message, setMessage] = useState('');
+
+  const load = async () => {
+    try {
+      const [p, s] = await Promise.all([adminApi('/plans'), adminApi('/settings')]);
+      setPlans(p.plans || []); setSettings(s.settings || {});
+    } catch (err) { if (/auth|token|administrator/i.test(err.message || '')) onLogout(); else setMessage(err.message); }
+  };
+  useEffect(() => { load(); }, []);
+
+  const savePlan = async e => {
+    e.preventDefault();
+    const payload = { ...draft, price: Number(draft.price), durationDays: Number(draft.durationDays), transactionFeePercent: Number(draft.transactionFeePercent), features: draft.featuresText.split('\n').map(x => x.trim()).filter(Boolean) };
+    delete payload.featuresText;
+    try {
+      if (editing) await adminApi(`/plans/${editing}`, { method: 'PUT', body: JSON.stringify(payload) });
+      else await adminApi('/plans', { method: 'POST', body: JSON.stringify(payload) });
+      setMessage('Plan saved'); setEditing(null); setDraft(emptyPlan); await load();
+    } catch (err) { setMessage(err.message); }
+  };
+
+  const editPlan = p => { setEditing(p._id); setDraft({ ...p, featuresText: (p.features || []).join('\n') }); setTab('plans'); window.scrollTo(0, 0); };
+  const removePlan = async id => { if (!confirm('Delete this plan?')) return; try { await adminApi(`/plans/${id}`, { method: 'DELETE' }); setMessage('Plan deleted'); await load(); } catch (err) { setMessage(err.message); } };
+  const saveSettings = async e => {
+    e.preventDefault();
+    try { await adminApi('/settings', { method: 'PUT', body: JSON.stringify(settings) }); setMessage('Payment settings saved'); }
+    catch (err) { setMessage(err.message); }
+  };
+
+  return <div className="admin"><aside><div className="brand"><b>ϟ</b><strong>AutoGateway</strong><em>ADMIN</em></div><nav><button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}><LayoutDashboard size={17}/> Dashboard</button><button className={tab === 'plans' ? 'active' : ''} onClick={() => setTab('plans')}><CreditCard size={17}/> Subscription Plans</button><button className={tab === 'payment' ? 'active' : ''} onClick={() => setTab('payment')}><WalletCards size={17}/> Payment Settings</button><button><ShieldCheck size={17}/> Security</button></nav><button className="logout" onClick={onLogout}>Logout</button></aside><main><header><div><small>ADMIN CONSOLE</small><h1>{tab === 'plans' ? 'Subscription Plans' : tab === 'payment' ? 'Payment Settings' : 'Dashboard'}</h1></div><div className="admin-user">Administrator</div></header>{message && <div className="notice" onClick={() => setMessage('')}>{message}</div>}{tab === 'dashboard' && <section><div className="hero-admin"><h2>Subscription control center</h2><p>Plans and payment configuration are stored in MongoDB through the protected admin API.</p></div><div className="stats"><div><b>{plans.length}</b><span>Total plans</span></div><div><b>{plans.filter(p => p.active).length}</b><span>Active plans</span></div><div><b>{settings.subscriptionPaymentLink ? 'SET' : 'NOT SET'}</b><span>Payment link</span></div></div></section>}{tab === 'plans' && <section><div className="section-top"><div><h2>Subscription Plans</h2><p>Edit price, validity and every feature from here.</p></div><button className="primary" onClick={() => { setEditing(null); setDraft(emptyPlan); }}><CreditCard size={17}/> Add Plan</button></div><div className="plans-list">{plans.map(p => <div className="plan-row" key={p._id}><div><div className="plan-name">{p.name} {p.active && <span>ACTIVE</span>}</div><div className="plan-price">₹{Number(p.price).toLocaleString('en-IN')}</div><div className="muted">{durationLabel(p.durationDays)} · {p.transactionFeePercent || 0}% fee</div><div className="features">{(p.features || []).map((f, i) => <span key={i}>✓ {f}</span>)}</div></div><div className="row-actions"><button onClick={() => editPlan(p)}>Edit</button><button className="danger" onClick={() => removePlan(p._id)}><Trash2 size={15}/> Delete</button></div></div>)}</div><form className="editor" onSubmit={savePlan}><h3>{editing ? 'Edit Plan' : 'Create Plan'}</h3><div className="form-grid"><label>Plan name<input value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} required /></label><label>Price (₹)<input type="number" min="0" value={draft.price} onChange={e => setDraft({ ...draft, price: e.target.value })} required /></label><label>Validity (days)<input type="number" min="1" value={draft.durationDays} onChange={e => setDraft({ ...draft, durationDays: e.target.value })} required /></label><label>Transaction fee %<input type="number" min="0" max="100" step="0.01" value={draft.transactionFeePercent} onChange={e => setDraft({ ...draft, transactionFeePercent: e.target.value })} /></label></div><label>Features — one per line<textarea value={draft.featuresText ?? (draft.features || []).join('\n')} onChange={e => setDraft({ ...draft, featuresText: e.target.value })} rows="8" placeholder="0% Fee\nRealtime\nNo Limit\nDynamic QR\nPaytm Button & Phonepe Button\n24/7 Support" /></label><label className="check"><input type="checkbox" checked={!!draft.active} onChange={e => setDraft({ ...draft, active: e.target.checked })}/> Active plan</label><div className="editor-actions"><button type="submit" className="primary"><Save size={17}/> Save Plan</button><button type="button" onClick={() => { setEditing(null); setDraft(emptyPlan); }}>Clear</button></div></form></section>}{tab === 'payment' && <section><form className="settings-card" onSubmit={saveSettings}><h2>Subscription Payment</h2><p>When a user buys a plan, the server creates the order using the exact plan price and opens this configured payment link.</p><label>Payment link template<input value={settings.subscriptionPaymentLink || ''} onChange={e => setSettings({ ...settings, subscriptionPaymentLink: e.target.value })} placeholder="https://your-payment-page.example/pay?amount={amount}&orderId={orderId}" /></label><div className="template-help">Use <b>{'{amount}'}</b> for exact plan price, <b>{'{orderId}'}</b> for the unique order ID and <b>{'{plan}'}</b> for the plan name. Example: your payment page should accept <b>?amount=2999.00</b>.</div><div className="form-grid"><label>Settlement UPI ID<input value={settings.settlementUpiId || ''} onChange={e => setSettings({ ...settings, settlementUpiId: e.target.value })} /></label><label>Settlement Name<input value={settings.settlementName || ''} onChange={e => setSettings({ ...settings, settlementName: e.target.value })} /></label></div><button className="primary"><Save size={17}/> Save Payment Settings</button></form></section>}</main></div>;
+}
+
+function durationLabel(days) { const d = Number(days || 0); if (d % 365 === 0) return `${d / 365} year${d / 365 === 1 ? '' : 's'}`; if (d % 30 === 0) return `${d / 30} month${d / 30 === 1 ? '' : 's'}`; return `${d} day${d === 1 ? '' : 's'}`; }
+
+createRoot(document.getElementById('root')).render(<App />);
