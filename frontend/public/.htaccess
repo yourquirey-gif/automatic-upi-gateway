@@ -1,0 +1,10 @@
+Options -MultiViews
+RewriteEngine On
+
+# Keep real files/directories available.
+RewriteCond %{REQUEST_FILENAME} -f [OR]
+RewriteCond %{REQUEST_FILENAME} -d
+RewriteRule ^ - [L]
+
+# React/Vite SPA fallback.
+RewriteRule ^ index.html [L]
