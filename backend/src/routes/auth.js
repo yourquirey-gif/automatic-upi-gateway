@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
 import User from '../models/User.js';
 import { nextUserId } from '../utils/userId.js';
 
@@ -18,6 +19,13 @@ function trialDates() {
   return { started, ends };
 }
 
+function createApiCredentials() {
+  return {
+    apiToken: `ag_live_${crypto.randomBytes(32).toString('hex')}`,
+    instanceSecret: `ag_sec_${crypto.randomBytes(32).toString('hex')}`
+  };
+}
+
 router.post('/register', async (req, res, next) => {
   try {
     const { name, email, password } = req.body;
@@ -30,11 +38,15 @@ router.post('/register', async (req, res, next) => {
     const passwordHash = await bcrypt.hash(password, 12);
     const { started, ends } = trialDates();
     const userId = await nextUserId();
+    const { apiToken, instanceSecret } = createApiCredentials();
     const user = await User.create({
       userId,
       name: name.trim(),
       email: normalizedEmail,
       passwordHash,
+      apiToken,
+      instanceSecret,
+      webhookUrl: '',
       trialStartedAt: started,
       trialEndsAt: ends
     });
