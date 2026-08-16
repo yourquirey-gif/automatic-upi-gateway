@@ -7,6 +7,8 @@ const planSchema = new mongoose.Schema({
   transactionLimit: { type: Number, default: 0, min: 0 },
   merchantLimit: { type: Number, default: 1, min: 1 },
   apiAccess: { type: Boolean, default: true },
+  transactionFeePercent: { type: Number, default: 0, min: 0, max: 100 },
+  features: { type: [String], default: [] },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 
