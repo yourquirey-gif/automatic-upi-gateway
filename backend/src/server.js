@@ -12,12 +12,14 @@ import accountRoutes from './routes/account.js';
 import kycRoutes from './routes/kyc.js';
 import kycConfigRoutes from './routes/kycConfig.js';
 import videoRoutes from './routes/videos.js';
+import publicApiRoutes from './routes/publicApi.js';
 import User from './models/User.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import { verifyPendingOrdersForAdmin } from './services/gmailPaymentVerifier.js';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
+app.set('trust proxy', 1);
 app.use(helmet());
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
@@ -33,6 +35,9 @@ app.use('/api/v1/account', accountRoutes);
 app.use('/api/v1/kyc', kycRoutes);
 app.use('/api/v1/kyc-config', kycConfigRoutes);
 app.use('/api/v1/videos', videoRoutes);
+
+// Public merchant API. Authentication is performed with each merchant's unique API token.
+app.use('/api', publicApiRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
