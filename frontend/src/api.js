@@ -22,4 +22,19 @@ export async function register(name, email, password) {
   return data;
 }
 
+export async function getSubscriptionPlans() {
+  return api('/subscriptions/plans');
+}
+
+export async function purchaseSubscription(planId) {
+  return api('/subscriptions/purchase', {
+    method: 'POST',
+    body: JSON.stringify({ planId })
+  });
+}
+
+export async function getMySubscription() {
+  return api('/subscriptions/me');
+}
+
 export function logout() { localStorage.removeItem('gateway_access_token'); }
