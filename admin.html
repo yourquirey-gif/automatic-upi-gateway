@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AutoGateway — Admin Panel</title>
+<style>
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif;background:linear-gradient(135deg,#eef1ff,#e8fff8);color:#172033;min-height:100vh}.wrap{min-height:100vh;display:grid;place-items:center;padding:22px}.card{width:min(460px,100%);background:#fff;border-radius:26px;padding:30px;box-shadow:0 25px 70px #17203320}.brand{display:flex;align-items:center;gap:13px;margin-bottom:25px}.logo{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;color:#fff;font-size:31px;font-weight:900;background:linear-gradient(135deg,#6267e9,#19b798)}h1{font-size:27px;margin:0}p{color:#788395;line-height:1.5}.field{margin:14px 0}.field label{display:block;font-size:13px;font-weight:800;margin-bottom:7px}.field input{width:100%;padding:14px;border:1px solid #dfe3eb;border-radius:12px;outline:0;font-size:15px}.field input:focus{border-color:#6267e9;box-shadow:0 0 0 3px #6267e918}.btn{width:100%;border:0;border-radius:12px;padding:14px;font-weight:850;color:#fff;background:linear-gradient(90deg,#6267e9,#19b798);cursor:pointer}.msg{margin-top:12px;padding:11px;border-radius:10px;display:none;font-size:13px}.ok{background:#e9fbf4;color:#087653}.err{background:#fff0f0;color:#b42318}.hidden{display:none}.top{display:flex;justify-content:space-between;align-items:center}.logout{border:0;background:#f2f4f8;border-radius:10px;padding:9px 13px;font-weight:800}.panel{margin-top:22px;padding:18px;border:1px solid #edf0f4;border-radius:16px}.badge{display:inline-block;padding:6px 10px;border-radius:99px;background:#e9fbf4;color:#087653;font-size:12px;font-weight:800}.note{font-size:12px;color:#9299a7;margin-top:15px}.danger{color:#b42318}
+</style>
+</head>
+<body>
+<div class="wrap"><main class="card">
+<div class="brand"><div class="logo">ϟ</div><div><h1>AutoGateway</h1><p style="margin:2px 0 0">Admin Control Panel</p></div></div>
+<section id="loginView">
+<h2>Admin Login</h2><p>Sign in to manage your gateway settings.</p>
+<div class="field"><label>Admin Email</label><input id="email" type="email" autocomplete="username" placeholder="Admin email"></div>
+<div class="field"><label>Password</label><input id="password" type="password" autocomplete="current-password" placeholder="Password"></div>
+<button class="btn" onclick="login()">Login to Admin</button><div id="loginMsg" class="msg"></div>
+<p class="note">For production use, connect this panel to a secure backend. GitHub Pages cannot keep credentials secret.</p>
+</section>
+<section id="dashboard" class="hidden">
+<div class="top"><div><h2 style="margin:0">Dashboard</h2><p style="margin:4px 0">Welcome, Administrator</p></div><button class="logout" onclick="logout()">Logout</button></div>
+<span class="badge">● Admin authenticated</span>
+<div class="panel"><h3>Change Admin Password</h3><p>Change the password whenever you want.</p>
+<div class="field"><label>Current Password</label><input id="currentPassword" type="password"></div>
+<div class="field"><label>New Password</label><input id="newPassword" type="password" minlength="8"></div>
+<div class="field"><label>Confirm New Password</label><input id="confirmPassword" type="password" minlength="8"></div>
+<button class="btn" onclick="changePassword()">Update Password</button><div id="passMsg" class="msg"></div></div>
+<div class="panel"><h3>OAuth Configuration</h3><p>OAuth endpoint can be connected here later. Once a backend endpoint is available, Google signup/login can be enabled without changing the landing-page design.</p><span class="badge">Backend endpoint required</span></div>
+<p class="note danger">Security note: this temporary GitHub Pages panel stores the changed password only in this browser. Do not use it as production authentication until a backend is connected.</p>
+</section>
+</main></div>
+<script>
+const ADMIN_EMAIL='ayushraj156aug@gmail.com';
+const INITIAL_PASSWORD_HASH='4cc8ee6bbe5064cc5f6cf782ec8b6fc8dcc333be7dd29155fa95bb33c44ff4f5';
+const KEY='autogateway_admin_password_hash';
+async function hash(v){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('')}
+function show(id,text,type){const e=document.getElementById(id);e.textContent=text;e.className='msg '+type;e.style.display='block'}
+async function login(){const email=document.getElementById('email').value.trim().toLowerCase(),pw=document.getElementById('password').value;const stored=localStorage.getItem(KEY)||INITIAL_PASSWORD_HASH;if(email!==ADMIN_EMAIL||await hash(pw)!==stored){show('loginMsg','Invalid admin email or password.','err');return}sessionStorage.setItem('autogateway_admin_session','1');document.getElementById('loginView').classList.add('hidden');document.getElementById('dashboard').classList.remove('hidden')}
+async function changePassword(){const current=document.getElementById('currentPassword').value,n=document.getElementById('newPassword').value,c=document.getElementById('confirmPassword').value,stored=localStorage.getItem(KEY)||INITIAL_PASSWORD_HASH;if(await hash(current)!==stored){show('passMsg','Current password is incorrect.','err');return}if(n.length<8){show('passMsg','New password must be at least 8 characters.','err');return}if(n!==c){show('passMsg','New passwords do not match.','err');return}localStorage.setItem(KEY,await hash(n));document.getElementById('currentPassword').value='';document.getElementById('newPassword').value='';document.getElementById('confirmPassword').value='';show('passMsg','Password updated successfully on this browser.','ok')}
+function logout(){sessionStorage.removeItem('autogateway_admin_session');document.getElementById('dashboard').classList.add('hidden');document.getElementById('loginView').classList.remove('hidden');document.getElementById('password').value=''}
+if(sessionStorage.getItem('autogateway_admin_session')==='1'){document.getElementById('loginView').classList.add('hidden');document.getElementById('dashboard').classList.remove('hidden')}
+</script>
+</body></html>
