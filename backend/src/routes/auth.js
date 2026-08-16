@@ -2,6 +2,7 @@ import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { nextUserId } from '../utils/userId.js';
 
 const router = Router();
 
@@ -28,7 +29,9 @@ router.post('/register', async (req, res, next) => {
     if (exists) return res.status(409).json({ status: false, message: 'Email is already registered' });
     const passwordHash = await bcrypt.hash(password, 12);
     const { started, ends } = trialDates();
+    const userId = await nextUserId();
     const user = await User.create({
+      userId,
       name: name.trim(),
       email: normalizedEmail,
       passwordHash,
@@ -40,7 +43,7 @@ router.post('/register', async (req, res, next) => {
       status: true,
       token,
       trial: { active: true, startedAt: started, endsAt: ends, durationDays: 2 },
-      user: { id: user._id, name: user.name, email: user.email, role: user.role }
+      user: { id: user._id, userId: user.userId, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) { next(error); }
 });
@@ -58,7 +61,7 @@ router.post('/login', async (req, res, next) => {
       status: true,
       token,
       trial: { active: trialActive, endsAt: user.trialEndsAt },
-      user: { id: user._id, name: user.name, email: user.email, role: user.role }
+      user: { id: user._id, userId: user.userId || null, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) { next(error); }
 });
