@@ -2,20 +2,35 @@ import { Router } from 'express';
 import User from '../models/User.js';
 import KycConfig from '../models/KycConfig.js';
 import { requireAuth } from '../middleware/auth.js';
+import { nextUserId } from '../utils/userId.js';
 
 const router = Router();
 router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
-    const [user, config] = await Promise.all([
-      User.findById(req.auth.sub).select('-passwordHash'),
-      KycConfig.findOneAndUpdate(
-        { key: 'global' },
-        {},
-        { upsert: true, new: true, setDefaultsOnInsert: true }
-      )
-    ]);
+    let user = await User.findById(req.auth.sub).select('-passwordHash');
+    if (!user) return res.status(404).json({ status: false, message: 'User not found' });
+
+    if (!user.userId) {
+      const generatedUserId = await nextUserId();
+      try {
+        user = await User.findOneAndUpdate(
+          { _id: user._id, $or: [{ userId: { $exists: false } }, { userId: null }, { userId: '' }] },
+          { $set: { userId: generatedUserId } },
+          { new: true, runValidators: true }
+        ).select('-passwordHash');
+      } catch (error) {
+        if (error?.code !== 11000) throw error;
+        user = await User.findById(req.auth.sub).select('-passwordHash');
+      }
+    }
+
+    const config = await KycConfig.findOneAndUpdate(
+      { key: 'global' },
+      {},
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
 
     res.json({
       status: true,
