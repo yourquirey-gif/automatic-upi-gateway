@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import Transactions from './Transactions.jsx';
+import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CustomRoutes.jsx';
 import './styles.css';
 import './dashboard.css';
 
@@ -16,6 +17,15 @@ function Root() {
 
   if (hash === '#dashboard/transactions') {
     return <Transactions onBack={() => { window.location.hash = 'dashboard'; }} />;
+  }
+  if (hash === '#dashboard/checkout') {
+    return <CheckoutPage />;
+  }
+  if (hash === '#dashboard/payment-link') {
+    return <PaymentLinkPage />;
+  }
+  if (hash.startsWith('#pay?')) {
+    return <PublicPaymentPage route={hash} />;
   }
 
   return <App />;
