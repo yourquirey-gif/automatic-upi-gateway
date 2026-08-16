@@ -9,6 +9,7 @@ import adminRoutes from './routes/admin.js';
 import gmailRoutes from './routes/gmail.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import accountRoutes from './routes/account.js';
+import ordersRoutes from './routes/orders.js';
 import kycRoutes from './routes/kyc.js';
 import kycConfigRoutes from './routes/kycConfig.js';
 import videoRoutes from './routes/videos.js';
@@ -33,11 +34,10 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/gmail', gmailRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
 app.use('/api/v1/account', accountRoutes);
+app.use('/api/v1/orders', ordersRoutes);
 app.use('/api/v1/kyc', kycRoutes);
 app.use('/api/v1/kyc-config', kycConfigRoutes);
 app.use('/api/v1/videos', videoRoutes);
-
-// Public merchant API. Authentication is performed with each merchant's unique API token.
 app.use('/api', publicApiRoutes);
 
 app.use((err, _req, res, _next) => {
@@ -48,7 +48,6 @@ app.use((err, _req, res, _next) => {
 async function expireSubscriptions() {
   const now = new Date();
   const expiredUsers = await User.find({ plan: { $ne: null }, planExpiresAt: { $ne: null, $lte: now }, planStatus: 'ACTIVE' }).select('_id plan');
-  if (!expiredUsers.length) return 0;
   for (const user of expiredUsers) {
     await SubscriptionOrder.updateMany({ user: user._id, plan: user.plan, status: 'SUCCESS', planExpiresAt: { $lte: now } }, { $set: { status: 'EXPIRED' } });
     await User.updateOne({ _id: user._id }, { $set: { plan: null, planStatus: 'EXPIRED' } });
