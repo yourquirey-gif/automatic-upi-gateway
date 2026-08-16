@@ -6,6 +6,7 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ['merchant', 'admin'], default: 'merchant' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
+  userId: { type: String, unique: true, sparse: true, index: true },
   mobile: { type: String, trim: true, default: '' },
   companyName: { type: String, trim: true, default: '' },
   panNumber: { type: String, trim: true, default: '' },
