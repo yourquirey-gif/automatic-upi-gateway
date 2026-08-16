@@ -4,102 +4,10 @@ import { getSubscriptionPlans, purchaseSubscription } from './api';
 import './subscription.css';
 
 export default function SubscriptionPage() {
-  const [plans, setPlans] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [busy, setBusy] = useState('');
-  const [error, setError] = useState('');
-  const [order, setOrder] = useState(null);
-
-  useEffect(() => {
-    getSubscriptionPlans()
-      .then(data => setPlans(data.plans || []))
-      .catch(err => setError(err.message || 'Unable to load plans'))
-      .finally(() => setLoading(false));
-  }, []);
-
-  const buy = async (plan) => {
-    if (!localStorage.getItem('gateway_access_token')) {
-      window.location.href = '/#login';
-      return;
-    }
-    setBusy(plan._id);
-    setError('');
-    try {
-      const data = await purchaseSubscription(plan._id);
-      setOrder(data.order);
-    } catch (err) {
-      setError(err.message || 'Unable to create payment');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const openPayment = () => {
-    if (!order?.paymentUrl) return;
-    window.open(order.paymentUrl, '_blank', 'noopener,noreferrer');
-  };
-
-  return (
-    <div className="subscription-page">
-      <header className="subscription-header">
-        <div className="subscription-brand"><span>ϟ</span><b>AutoGateway</b></div>
-        <a href="/" className="subscription-home">Home</a>
-      </header>
-      <main className="subscription-main">
-        <div className="subscription-heading">
-          <span className="subscription-eyebrow">SUBSCRIPTION</span>
-          <h1>Choose Your Plan</h1>
-          <p>Flexible plans for your business growth</p>
-        </div>
-        {error && <div className="subscription-error">{error}</div>}
-        {loading ? (
-          <div className="subscription-loading"><Loader2 className="spin" /> Loading plans…</div>
-        ) : (
-          <div className="subscription-grid">
-            {plans.map((plan, index) => (
-              <article className={`subscription-card ${index === 1 ? 'featured' : ''}`} key={plan._id}>
-                {index === 1 && <div className="subscription-popular">Popular</div>}
-                <div className="subscription-card-head">
-                  <div className="subscription-plan-icon"><CreditCard size={28} /></div>
-                  <h2>{plan.name}</h2>
-                  <div className="subscription-price">₹{Number(plan.price).toLocaleString('en-IN')}<small>/mo</small></div>
-                  <div className="subscription-duration"><CalendarDays size={18} /> {durationLabel(plan.durationDays)}</div>
-                </div>
-                <div className="subscription-features">
-                  <h3><Check size={18} /> Features</h3>
-                  {(plan.features || []).map((feature, i) => (
-                    <div className="subscription-feature" key={`${feature}-${i}`}><Check size={18} /> <span>{feature}</span></div>
-                  ))}
-                </div>
-                <button className="subscription-buy" onClick={() => buy(plan)} disabled={busy === plan._id}>
-                  {busy === plan._id ? <><Loader2 className="spin" size={18}/> Creating Payment…</> : <>Get Started <ArrowRight size={19}/></>}
-                </button>
-              </article>
-            ))}
-          </div>
-        )}
-        {!loading && !plans.length && !error && <div className="subscription-empty">No active subscription plans are available right now.</div>}
-      </main>
-      {order && (
-        <div className="subscription-modal-backdrop">
-          <div className="subscription-modal">
-            <button className="subscription-close" onClick={() => setOrder(null)}><X size={20}/></button>
-            <div className="subscription-modal-icon">₹</div>
-            <h2>Payment Ready</h2>
-            <p>{order.plan} plan • <b>₹{Number(order.amount).toLocaleString('en-IN')}</b></p>
-            <div className="subscription-order">Order ID: <b>{order.orderId}</b></div>
-            <button className="subscription-pay" onClick={openPayment}>Pay ₹{Number(order.amount).toLocaleString('en-IN')} <ArrowRight size={18}/></button>
-            <small>Payment opens using the payment link configured by the administrator. The amount is generated from the selected plan.</small>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  const [plans, setPlans] = useState([]); const [loading, setLoading] = useState(true); const [busy, setBusy] = useState(''); const [error, setError] = useState(''); const [order, setOrder] = useState(null);
+  useEffect(() => { getSubscriptionPlans().then(data => setPlans(data.plans || [])).catch(err => setError(err.message || 'Unable to load plans')).finally(() => setLoading(false)); }, []);
+  const buy = async plan => { if (!localStorage.getItem('gateway_access_token')) { window.location.href = '/#login'; return; } setBusy(plan._id); setError(''); try { const data = await purchaseSubscription(plan._id); setOrder(data.order); } catch (err) { setError(err.message || 'Unable to create payment'); } finally { setBusy(''); } };
+  const openPayment = () => { if (order?.paymentUrl) window.open(order.paymentUrl, '_blank', 'noopener,noreferrer'); };
+  return <div className="subscription-page"><header className="subscription-header"><div className="subscription-brand"><span>ϟ</span><b>AutoGateway</b></div><a href="/" className="subscription-home">Home</a></header><main className="subscription-main"><div className="subscription-heading"><span className="subscription-eyebrow">SUBSCRIPTION</span><h1>Choose Your Plan</h1><p>Flexible plans for your business growth</p></div>{error && <div className="subscription-error">{error}</div>}{loading ? <div className="subscription-loading"><Loader2 className="spin"/> Loading plans…</div> : <div className="subscription-grid">{plans.map(plan => <article className={`subscription-card ${plan.popular ? 'featured' : ''}`} key={plan._id}>{plan.popular && <div className="subscription-popular">Popular</div>}<div className="subscription-card-head"><div className="subscription-plan-icon"><CreditCard size={28}/></div><h2>{plan.name}</h2><div className="subscription-price">₹{Number(plan.price).toLocaleString('en-IN')}<small>/mo</small></div><div className="subscription-duration"><CalendarDays size={18}/> {durationLabel(plan.durationDays)}</div></div><div className="subscription-features"><h3><Check size={18}/> Features</h3>{(plan.features || []).map((feature, i) => <div className="subscription-feature" key={`${feature}-${i}`}><Check size={18}/> <span>{feature}</span></div>)}</div><button className="subscription-buy" onClick={() => buy(plan)} disabled={busy === plan._id}>{busy === plan._id ? <><Loader2 className="spin" size={18}/> Creating Payment…</> : <>Get Started <ArrowRight size={19}/></>}</button></article>)}</div>}{!loading && !plans.length && !error && <div className="subscription-empty">No active subscription plans are available right now.</div>}</main>{order && <div className="subscription-modal-backdrop"><div className="subscription-modal"><button className="subscription-close" onClick={() => setOrder(null)}><X size={20}/></button><div className="subscription-modal-icon">₹</div><h2>Payment Ready</h2><p>{order.plan} plan • <b>₹{Number(order.amount).toLocaleString('en-IN')}</b></p><div className="subscription-order">Order ID: <b>{order.orderId}</b></div><button className="subscription-pay" onClick={openPayment}>Pay ₹{Number(order.amount).toLocaleString('en-IN')} <ArrowRight size={18}/></button><small>Payment opens using the payment link configured by the administrator. The amount is generated from the selected plan.</small></div></div>}</div>;
 }
-
-function durationLabel(days) {
-  const d = Number(days || 0);
-  if (d % 365 === 0) return `${d / 365} Year${d / 365 === 1 ? '' : 's'}`;
-  if (d % 30 === 0) return `${d / 30} Month${d / 30 === 1 ? '' : 's'}`;
-  return `${d} Day${d === 1 ? '' : 's'}`;
-}
+function durationLabel(days) { const d = Number(days || 0); if (d % 365 === 0) return `${d / 365} Year${d / 365 === 1 ? '' : 's'}`; if (d % 30 === 0) return `${d / 30} Month${d / 30 === 1 ? '' : 's'}`; return `${d} Day${d === 1 ? '' : 's'}`; }
