@@ -12,11 +12,15 @@ export default function SubscriptionPage() {
   const [success, setSuccess] = useState(null);
   const [expired, setExpired] = useState(false);
   const pollRef = useRef(null);
+  const expiryRef = useRef(null);
 
   useEffect(() => {
     getSubscriptionPlans().then(data => setPlans(data.plans || [])).catch(err => setError(err.message || 'Unable to load plans')).finally(() => setLoading(false));
-    if (localStorage.getItem('gateway_access_token')) {
-      getMySubscription().then(data => {
+
+    const checkSubscription = async () => {
+      if (!localStorage.getItem('gateway_access_token')) return;
+      try {
+        const data = await getMySubscription();
         if (data.expired) {
           const key = `subscription-expired-${data.expiresAt || 'unknown'}`;
           if (localStorage.getItem('subscription-expired-popup') !== key) {
@@ -24,16 +28,19 @@ export default function SubscriptionPage() {
             setExpired(true);
           }
         }
-      }).catch(() => {});
-    }
-    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+      } catch (_) {}
+    };
+
+    checkSubscription();
+    expiryRef.current = setInterval(checkSubscription, 60000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      if (expiryRef.current) clearInterval(expiryRef.current);
+    };
   }, []);
 
   const buy = async (plan) => {
-    if (!localStorage.getItem('gateway_access_token')) {
-      window.location.href = '/#login';
-      return;
-    }
+    if (!localStorage.getItem('gateway_access_token')) { window.location.href = '/#login'; return; }
     setBusy(plan._id); setError('');
     try {
       const data = await purchaseSubscription(plan._id);
@@ -50,22 +57,16 @@ export default function SubscriptionPage() {
       try {
         const data = await getSubscriptionOrder(orderId);
         if (data.order?.status === 'SUCCESS') {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          setOrder(null);
+          clearInterval(pollRef.current); pollRef.current = null; setOrder(null);
           setSuccess({ amount: data.order.amount, plan: data.order.plan, expiresAt: data.order.expiresAt });
         } else if (data.order?.status === 'EXPIRED' || checks >= 60) {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
+          clearInterval(pollRef.current); pollRef.current = null;
         }
       } catch (_) {}
     }, 5000);
   };
 
-  const openPayment = () => {
-    if (!order?.paymentUrl) return;
-    window.open(order.paymentUrl, '_blank', 'noopener,noreferrer');
-  };
+  const openPayment = () => { if (order?.paymentUrl) window.open(order.paymentUrl, '_blank', 'noopener,noreferrer'); };
 
   return (
     <div className="subscription-page">
@@ -85,9 +86,7 @@ export default function SubscriptionPage() {
       </main>
 
       {order && <div className="subscription-modal-backdrop"><div className="subscription-modal"><button className="subscription-close" onClick={() => setOrder(null)}><X size={20}/></button><div className="subscription-modal-icon">₹</div><h2>Payment Ready</h2><p>{order.plan} plan • <b>₹{Number(order.amount).toLocaleString('en-IN')}</b></p><div className="subscription-order">Order ID: <b>{order.orderId}</b></div><button className="subscription-pay" onClick={openPayment}>Pay ₹{Number(order.amount).toLocaleString('en-IN')} <ArrowRight size={18}/></button><small>UPI payment amount is generated automatically from this plan. After payment is verified, your subscription will activate automatically.</small></div></div>}
-
       {success && <div className="subscription-modal-backdrop"><div className="subscription-modal success-modal"><div className="success-check">✓</div><h2>Purchase Successful!</h2><p className="success-main">Your <b>{success.plan}</b> plan is now active.</p><div className="success-details"><div><span>Amount Paid</span><b>₹{Number(success.amount).toLocaleString('en-IN')}</b></div><div><span>Plan Expiry</span><b>{formatDate(success.expiresAt)}</b></div></div><button className="subscription-pay" onClick={() => setSuccess(null)}>Continue <ArrowRight size={18}/></button></div></div>}
-
       {expired && <div className="subscription-modal-backdrop"><div className="subscription-modal expired-modal"><div className="expired-icon">!</div><h2>Your Plan Has Expired</h2><p>Your subscription has expired. Please resubscribe to continue using premium gateway features.</p><button className="subscription-pay" onClick={() => setExpired(false)}>Resubscribe <ArrowRight size={18}/></button></div></div>}
     </div>
   );
