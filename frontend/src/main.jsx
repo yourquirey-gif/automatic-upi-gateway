@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
 import Transactions from './Transactions.jsx';
 import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CheckoutRoutesV2.jsx';
+import SubscriptionPage from './SubscriptionPage.jsx';
 import './styles.css';
 import './dashboard.css';
 
@@ -15,6 +16,9 @@ function Root() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
 
+  if (window.location.pathname === '/auth' || hash === '#subscription' || hash === '#dashboard/subscription') {
+    return <SubscriptionPage />;
+  }
   if (hash === '#dashboard/transactions') {
     return <Transactions onBack={() => { window.location.hash = 'dashboard'; }} />;
   }
