@@ -6,7 +6,9 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String, required: true, select: false },
   role: { type: String, enum: ['merchant', 'admin'], default: 'merchant' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
-  plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null }
+  plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null },
+  trialStartedAt: { type: Date, default: null },
+  trialEndsAt: { type: Date, default: null }
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);
