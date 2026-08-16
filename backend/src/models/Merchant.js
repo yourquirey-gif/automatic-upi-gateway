@@ -8,7 +8,10 @@ const merchantSchema = new mongoose.Schema({
   mobile: { type: String, trim: true },
   status: { type: String, enum: ['pending', 'active', 'paused', 'error'], default: 'pending', index: true },
   externalMerchantId: { type: String, trim: true },
-  config: { type: mongoose.Schema.Types.Mixed, default: {} }
+  config: { type: mongoose.Schema.Types.Mixed, default: {} },
+  planActivatedAt: { type: Date, default: null },
+  planExpiresAt: { type: Date, default: null },
+  planTransactionFeePercent: { type: Number, default: 0, min: 0, max: 100 }
 }, { timestamps: true });
 
 export default mongoose.model('Merchant', merchantSchema);
