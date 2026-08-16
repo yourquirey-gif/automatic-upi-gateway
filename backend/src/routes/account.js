@@ -121,7 +121,7 @@ router.get('/api', async (req, res, next) => {
 router.put('/api/webhook', async (req, res, next) => {
   try {
     const webhookUrl = String(req.body?.webhookUrl || '').trim();
-    if (webhookUrl && !/^https?:\\/\\//i.test(webhookUrl)) {
+    if (webhookUrl && !/^https?:\/\//i.test(webhookUrl)) {
       return res.status(400).json({ status: false, message: 'Webhook URL must include http or https' });
     }
     const user = await User.findByIdAndUpdate(
