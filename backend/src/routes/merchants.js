@@ -1,9 +1,10 @@
 import { Router } from 'express';
 import Merchant from '../models/Merchant.js';
 import { requireAuth } from '../middleware/auth.js';
+import { requireKycIfEnabled } from '../middleware/kyc.js';
 
 const router = Router();
-router.use(requireAuth);
+router.use(requireAuth, requireKycIfEnabled);
 
 router.get('/', async (req, res, next) => {
   try {
