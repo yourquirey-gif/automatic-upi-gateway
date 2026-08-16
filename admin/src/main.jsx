@@ -1,0 +1,9 @@
+import React from 'react';
+import { createRoot } from 'react-dom/client';
+import { LayoutDashboard, Users, Store, Receipt, CreditCard, Settings, ShieldCheck } from 'lucide-react';
+import './styles.css';
+
+const items = [['Dashboard',LayoutDashboard],['Users',Users],['Merchants',Store],['Transactions',Receipt],['Plans',CreditCard],['Security',ShieldCheck],['Settings',Settings]];
+function App(){return <div className="admin"><aside><div className="brand"><b>U</b><strong>UPI Gateway</strong><em>ADMIN</em></div><nav>{items.map(([name,Icon],i)=><button className={i===0?'active':''} key={name}><Icon size={17}/>{name}</button>)}</nav></aside><main><header><div><small>ADMIN CONSOLE</small><h1>Dashboard</h1></div><div className="admin-user"><span>A</span><div><b>Administrator</b><small>System access</small></div></div></header><section><div className="cards"><Card title="Total Users" value="1,284" note="+8.2%"/><Card title="Active Merchants" value="936" note="+5.4%"/><Card title="Transactions" value="48,392" note="+14.7%"/><Card title="Processed Volume" value="₹18.42L" note="+11.3%"/></div><div className="panels"><div className="panel"><h2>System overview</h2><p>Live gateway metrics</p><div className="bars"><i style={{height:'48%'}}/><i style={{height:'68%'}}/><i style={{height:'54%'}}/><i style={{height:'82%'}}/><i style={{height:'74%'}}/><i style={{height:'91%'}}/><i style={{height:'78%'}}/></div></div><div className="panel"><h2>System status</h2><p>Services and integrations</p><Status name="API"/><Status name="Database"/><Status name="Webhooks"/><Status name="Merchant services"/></div></div></section></main></div>}
+function Card({title,value,note}){return <div className="card"><small>{title}</small><strong>{value}</strong><span>{note} <label>this month</label></span></div>};function Status({name}){return <div className="status"><span>{name}</span><b><i/>Operational</b></div>};
+createRoot(document.getElementById('root')).render(<App/>);
