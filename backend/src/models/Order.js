@@ -12,7 +12,13 @@ const orderSchema = new mongoose.Schema({
   paymentUrl: String,
   status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'EXPIRED'], default: 'PENDING', index: true },
   utr: { type: String, trim: true },
-  paidAt: Date
+  paidAt: Date,
+  feePercent: { type: Number, default: 0, min: 0, max: 100 },
+  feeAmount: { type: Number, default: 0, min: 0 },
+  netAmount: { type: Number, default: 0, min: 0 },
+  feeSettlementStatus: { type: String, enum: ['NOT_APPLICABLE', 'PENDING', 'SETTLED', 'MANUAL'], default: 'NOT_APPLICABLE' },
+  verificationSource: { type: String, enum: ['gmail', 'provider_webhook', 'manual'], default: 'manual' },
+  verificationMessageId: { type: String, trim: true }
 }, { timestamps: true });
 
 export default mongoose.model('Order', orderSchema);
