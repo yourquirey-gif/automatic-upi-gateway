@@ -1,0 +1,1 @@
+import {api} from './api'; export const getKycSettings=()=>api('/kyc/settings'); export const createKyc=data=>api('/kyc/create',{method:'POST',body:JSON.stringify(data)}); export const getKyc=()=>api('/kyc/me');
