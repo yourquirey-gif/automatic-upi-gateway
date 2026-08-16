@@ -16,12 +16,7 @@ function extractUtr(text) { return text.match(/(?:UTR|UPI\s*Ref(?:erence)?|Trans
 function amountMatches(text, amount) { const normalized = text.replace(/,/g, ''); const value = Number(amount).toFixed(2); return new RegExp(`(?:₹|INR|Rs\\.?)[\\s:]*${value.replace('.', '[.]')}(?!\\d)`, 'i').test(normalized) || normalized.includes(value); }
 function expiryFrom(start, days) { return new Date(new Date(start).getTime() + Number(days) * 86400000); }
 
-export async function verifyPendingOrdersForAdmin(ownerId) {
-  const connection = await GmailConnection.findOne({ owner: ownerId, active: true }).select('+refreshTokenEncrypted');
-  if (!connection) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0, reason: 'gmail_not_connected' };
-  const settings = await GatewaySettings.findOne({ key: 'global' });
-  if (settings?.gmailPaymentVerificationEnabled === false) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0, reason: 'gmail_verification_disabled' };
-
+async function verifyConnection(connection, settings) {
   const client = oauthClient();
   client.setCredentials({ refresh_token: decryptSecret(connection.refreshTokenEncrypted) });
   const gmail = google.gmail({ version: 'v1', auth: client });
@@ -29,11 +24,12 @@ export async function verifyPendingOrdersForAdmin(ownerId) {
   const ids = (listed.data.messages || []).map(m => m.id).filter(Boolean);
   if (!ids.length) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0 };
 
-  // The Gmail account is the gateway verification account, so merchant orders are
-  // searched across active merchants. order_id + amount must both match.
-  const pending = await Order.find({ status: 'PENDING' }).limit(500);
-  const subscriptions = await SubscriptionOrder.find({ status: 'PENDING' }).populate('plan').limit(200);
-  const kycPayments = await KycOrder.find({ status: 'PENDING_PAYMENT' }).limit(200);
+  // Every connected merchant verifies only against its own Gmail account.
+  // Order ownership is matched to the GmailConnection owner before SUCCESS is set.
+  const ownerId = connection.owner;
+  const pending = await Order.find({ owner: ownerId, status: 'PENDING' }).limit(500);
+  const subscriptions = await SubscriptionOrder.find({ user: ownerId, status: 'PENDING' }).populate('plan').limit(200);
+  const kycPayments = await KycOrder.find({ user: ownerId, status: 'PENDING_PAYMENT' }).limit(200);
   let confirmed = 0; let subscriptionsActivated = 0; let kycPaymentsConfirmed = 0;
 
   for (const id of ids) {
@@ -67,6 +63,30 @@ export async function verifyPendingOrdersForAdmin(ownerId) {
 
   connection.lastCheckedAt = new Date(); connection.lastMessageId = ids[0] || connection.lastMessageId; await connection.save();
   return { checked: ids.length, confirmed, subscriptionsActivated, kycPaymentsConfirmed };
+}
+
+export async function verifyPendingOrdersForAdmin(ownerId) {
+  const connection = await GmailConnection.findOne({ owner: ownerId, active: true }).select('+refreshTokenEncrypted');
+  if (!connection) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0, reason: 'gmail_not_connected' };
+  const settings = await GatewaySettings.findOne({ key: 'global' });
+  if (settings?.gmailPaymentVerificationEnabled === false) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0, reason: 'gmail_verification_disabled' };
+  return verifyConnection(connection, settings);
+}
+
+export async function verifyAllConnectedGmails() {
+  const settings = await GatewaySettings.findOne({ key: 'global' });
+  if (settings?.gmailPaymentVerificationEnabled === false) return { connections: 0, checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0, reason: 'gmail_verification_disabled' };
+  const connections = await GmailConnection.find({ active: true }).select('+refreshTokenEncrypted');
+  const totals = { connections: connections.length, checked: 0, confirmed: 0, subscriptionsActivated: 0, kycPaymentsConfirmed: 0 };
+  for (const connection of connections) {
+    try {
+      const result = await verifyConnection(connection, settings);
+      totals.checked += result.checked; totals.confirmed += result.confirmed; totals.subscriptionsActivated += result.subscriptionsActivated; totals.kycPaymentsConfirmed += result.kycPaymentsConfirmed;
+    } catch (error) {
+      console.error(`Gmail verification failed for connection ${connection.email}:`, error.message);
+    }
+  }
+  return totals;
 }
 
 export function createGoogleClient() { return oauthClient(); }
