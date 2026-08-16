@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 import User from '../models/User.js';
 import KycConfig from '../models/KycConfig.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -7,6 +8,28 @@ import { nextUserId } from '../utils/userId.js';
 
 const router = Router();
 router.use(requireAuth);
+
+function newApiToken() {
+  return `ag_live_${crypto.randomBytes(32).toString('hex')}`;
+}
+
+function newInstanceSecret() {
+  return `ag_sec_${crypto.randomBytes(32).toString('hex')}`;
+}
+
+async function ensureApiCredentials(user) {
+  let changed = false;
+  if (!user.apiToken) {
+    user.apiToken = newApiToken();
+    changed = true;
+  }
+  if (!user.instanceSecret) {
+    user.instanceSecret = newInstanceSecret();
+    changed = true;
+  }
+  if (changed) await user.save({ validateBeforeSave: false });
+  return user;
+}
 
 router.get('/', async (req, res, next) => {
   try {
@@ -74,6 +97,63 @@ router.put('/password', async (req, res, next) => {
     user.passwordHash = await bcrypt.hash(newPassword, 12);
     await user.save();
     res.json({ status: true, message: 'Password changed successfully' });
+  } catch (error) { next(error); }
+});
+
+// Developer credentials are isolated per authenticated merchant.
+router.get('/api', async (req, res, next) => {
+  try {
+    const user = await User.findById(req.auth.sub).select('+apiToken +instanceSecret webhookUrl userId');
+    if (!user) return res.status(404).json({ status: false, message: 'User not found' });
+    await ensureApiCredentials(user);
+    res.json({
+      status: true,
+      credentials: {
+        userId: user.userId || null,
+        apiToken: user.apiToken,
+        instanceSecret: user.instanceSecret,
+        webhookUrl: user.webhookUrl || ''
+      }
+    });
+  } catch (error) { next(error); }
+});
+
+router.put('/api/webhook', async (req, res, next) => {
+  try {
+    const webhookUrl = String(req.body?.webhookUrl || '').trim();
+    if (webhookUrl && !/^https?:\\/\\//i.test(webhookUrl)) {
+      return res.status(400).json({ status: false, message: 'Webhook URL must include http or https' });
+    }
+    const user = await User.findByIdAndUpdate(
+      req.auth.sub,
+      { $set: { webhookUrl } },
+      { new: true, runValidators: true }
+    );
+    if (!user) return res.status(404).json({ status: false, message: 'User not found' });
+    res.json({ status: true, message: 'Webhook updated successfully', webhookUrl: user.webhookUrl || '' });
+  } catch (error) { next(error); }
+});
+
+router.post('/api/regenerate', async (req, res, next) => {
+  try {
+    const type = String(req.body?.type || '').toLowerCase();
+    if (!['token', 'secret'].includes(type)) {
+      return res.status(400).json({ status: false, message: 'Invalid credential type' });
+    }
+    const user = await User.findById(req.auth.sub).select('+apiToken +instanceSecret userId');
+    if (!user) return res.status(404).json({ status: false, message: 'User not found' });
+    if (type === 'token') user.apiToken = newApiToken();
+    else user.instanceSecret = newInstanceSecret();
+    await user.save({ validateBeforeSave: false });
+    res.json({
+      status: true,
+      message: type === 'token' ? 'API token regenerated successfully' : 'Instance secret regenerated successfully',
+      credentials: {
+        userId: user.userId || null,
+        apiToken: user.apiToken,
+        instanceSecret: user.instanceSecret
+      }
+    });
   } catch (error) { next(error); }
 });
 
