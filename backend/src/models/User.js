@@ -8,7 +8,10 @@ const userSchema = new mongoose.Schema({
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   plan: { type: mongoose.Schema.Types.ObjectId, ref: 'Plan', default: null },
   trialStartedAt: { type: Date, default: null },
-  trialEndsAt: { type: Date, default: null }
+  trialEndsAt: { type: Date, default: null },
+  planStartedAt: { type: Date, default: null },
+  planExpiresAt: { type: Date, default: null, index: true },
+  planStatus: { type: String, enum: ['NONE', 'ACTIVE', 'EXPIRED'], default: 'NONE', index: true }
 }, { timestamps: true });
 
 export default mongoose.model('User', userSchema);
