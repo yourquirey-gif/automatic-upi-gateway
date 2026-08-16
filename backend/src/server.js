@@ -16,7 +16,7 @@ import videoRoutes from './routes/videos.js';
 import publicApiRoutes from './routes/publicApi.js';
 import User from './models/User.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
-import { verifyPendingOrdersForAdmin } from './services/gmailPaymentVerifier.js';
+import { verifyAllConnectedGmails } from './services/gmailPaymentVerifier.js';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -63,8 +63,8 @@ connectDatabase()
     if (process.env.GMAIL_AUTO_SYNC === 'true') {
       setInterval(async () => {
         try {
-          const admins = await User.find({ role: 'admin', status: 'active' }).select('_id');
-          for (const admin of admins) await verifyPendingOrdersForAdmin(admin._id);
+          const result = await verifyAllConnectedGmails();
+          if (result.confirmed || result.subscriptionsActivated || result.kycPaymentsConfirmed) console.log('Gmail verification:', result);
         } catch (error) { console.error('Gmail sync failed:', error.message); }
       }, Number(process.env.GMAIL_SYNC_INTERVAL_MS || 60000));
     }
