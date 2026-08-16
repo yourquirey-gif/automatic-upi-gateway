@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ArrowRight, Check, Menu, Play, Rocket, ShieldCheck, LockKeyhole, UserRoundCheck, Sparkles, BarChart3, Zap, Shield, X, ArrowLeft } from 'lucide-react';
 import { login, register } from './api';
+import './auth.css';
 
 const plans = [
   { name: 'Basic', price: '₹999.00', duration: '1 Month', icon: Sparkles, featured: false },
@@ -62,10 +63,8 @@ function AuthPage({ mode, onClose }) {
   const submit = async e => {
     e.preventDefault(); setError(''); setLoading(true);
     try {
-      const result = tab === 'login' ? await login(email, password) : await register(name, email, password);
-      window.location.hash = 'dashboard';
-      window.location.reload();
-      return result;
+      if (tab === 'login') await login(email, password); else await register(name, email, password);
+      window.location.hash = 'dashboard'; window.location.reload();
     } catch (err) { setError(err.message || 'Unable to continue'); } finally { setLoading(false); }
   };
   return <div className="auth-page">
