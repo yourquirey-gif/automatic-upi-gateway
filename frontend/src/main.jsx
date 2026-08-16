@@ -5,6 +5,7 @@ import Transactions from './Transactions.jsx';
 import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CheckoutRoutesV2.jsx';
 import SubscriptionPage from './SubscriptionPage.jsx';
 import AccountPage from './AccountPage.jsx';
+import PasswordPage from './PasswordPage.jsx';
 import KycPage from './KycPage.jsx';
 import { api } from './api';
 import './styles.css';
@@ -16,6 +17,7 @@ function Root() {
   useEffect(() => { const onHashChange = () => setHash(window.location.hash); window.addEventListener('hashchange', onHashChange); return () => window.removeEventListener('hashchange', onHashChange); }, []);
   if (window.location.pathname === '/auth') return <SubscriptionPage />;
   if (hash === '#dashboard/account') return <AccountPage />;
+  if (hash === '#dashboard/password') return <PasswordPage />;
   if (hash === '#dashboard/kyc') return <KycPage />;
   if (hash === '#subscription' || hash === '#dashboard/subscription') return <KycGate><SubscriptionPage /></KycGate>;
   if (hash === '#dashboard/transactions') return <KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate>;
