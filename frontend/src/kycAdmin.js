@@ -19,7 +19,7 @@ export default function KycAdmin() {
 
   const load = async () => {
     const [requests, settings] = await Promise.all([
-      api('/kyc/admin/requests'),
+      api('/admin/kyc'),
       api('/kyc-config')
     ]);
     setRows(requests.requests || []);
@@ -36,6 +36,7 @@ export default function KycAdmin() {
     try {
       await api('/kyc-config', { method: 'PUT', body: JSON.stringify(cfg) });
       setMsg('KYC & Account Settings saved successfully.');
+      await load();
     } catch (e) {
       setMsg(e.message);
     } finally {
@@ -45,8 +46,8 @@ export default function KycAdmin() {
 
   const act = async (id, type) => {
     try {
-      await api(`/kyc/admin/${id}/${type}`, { method: 'POST', body: JSON.stringify({}) });
-      setMsg(type === 'verify' ? 'KYC verified. User will see verification status.' : 'KYC request updated.');
+      await api(`/admin/kyc/${id}/${type}`, { method: 'POST', body: JSON.stringify({}) });
+      setMsg(type === 'verify' ? 'KYC verified. User will see the verification status.' : 'KYC request updated.');
       await load();
     } catch (e) {
       setMsg(e.message);
@@ -68,43 +69,23 @@ export default function KycAdmin() {
         <section className="settings-card">
           <h2>Account Settings Fields</h2>
           <p style={{ color: '#70798a', marginTop: -6 }}>
-            Control which document fields merchants can see and edit in their Account Settings.
+            These switches are stored in KycConfig and immediately control the merchant Account Settings page.
           </p>
 
-          <ToggleRow
-            title="Show PAN Number"
-            description="Show or hide PAN Number in the merchant user panel."
-            checked={cfg.panField}
-            onChange={v => setCfg({ ...cfg, panField: v })}
-          />
-          <ToggleRow
-            title="Show Aadhaar Number"
-            description="Show or hide Aadhaar Number in the merchant user panel."
-            checked={cfg.aadhaarField}
-            onChange={v => setCfg({ ...cfg, aadhaarField: v })}
-          />
+          <ToggleRow title="Show PAN Number" description="Show or hide PAN Number in the merchant user panel." checked={cfg.panField} onChange={v => setCfg({ ...cfg, panField: v })} />
+          <ToggleRow title="Show Aadhaar Number" description="Show or hide Aadhaar Number in the merchant user panel." checked={cfg.aadhaarField} onChange={v => setCfg({ ...cfg, aadhaarField: v })} />
         </section>
 
         <section className="settings-card">
           <h2>KYC Controls</h2>
-          <ToggleRow
-            title="Enable KYC"
-            description="Enable the KYC verification feature for merchants."
-            checked={cfg.enabled}
-            onChange={v => setCfg({ ...cfg, enabled: v })}
-          />
-          <ToggleRow
-            title="Require KYC"
-            description="When enabled, KYC becomes mandatory before gateway access."
-            checked={cfg.required}
-            onChange={v => setCfg({ ...cfg, required: v })}
-          />
+          <ToggleRow title="Enable KYC" description="Enable the KYC verification feature for merchants." checked={cfg.enabled} onChange={v => setCfg({ ...cfg, enabled: v })} />
+          <ToggleRow title="Require KYC" description="When enabled, KYC must be verified before protected gateway access." checked={cfg.required} onChange={v => setCfg({ ...cfg, required: v })} />
 
           <label>KYC price (₹)
             <input type="number" min="0" value={cfg.price} onChange={e => setCfg({ ...cfg, price: Number(e.target.value) })} />
           </label>
           <label>KYC payment UPI ID
-            <input value={cfg.paymentUpiId} onChange={e => setCfg({ ...cfg, paymentUpiId: e.target.value })} />
+            <input value={cfg.paymentUpiId} onChange={e => setCfg({ ...cfg, paymentUpiId: e.target.value })} placeholder="yourupi@bank" />
           </label>
           <label>Payment name
             <input value={cfg.paymentName} onChange={e => setCfg({ ...cfg, paymentName: e.target.value })} />
@@ -119,25 +100,17 @@ export default function KycAdmin() {
           <h2>KYC Requests</h2>
           {rows.length === 0 && <div style={{ color: '#7a8494' }}>No KYC requests yet.</div>}
           {rows.map(x => (
-            <div className="plan-row" key={x._id}>
+            <div className="plan-row" key={x.id}>
               <div>
-                <b>{x.user?.name} — {x.status}</b>
-                <div>{x.user?.email}</div>
-                <div>Payment: {x.paymentStatus} • ₹{x.amount}</div>
-                <div>Aadhaar: {x.aadhaarNumber} • PAN: {x.panNumber}</div>
+                <b>{x.user?.name || 'Unknown user'} — {x.status}</b>
+                <div>User ID: {x.user?.userId || '—'}</div>
+                <div>{x.user?.email || '—'} {x.user?.mobile ? `• ${x.user.mobile}` : ''}</div>
+                <div>Order: {x.orderId} • Payment: {x.paidAt ? 'PAID' : 'PENDING'} • ₹{x.amount}</div>
+                <div>Aadhaar: {x.aadhaar?.number || 'Not submitted'} • PAN: {x.pan?.number || 'Not submitted'}</div>
               </div>
               <div className="row-actions">
-                {x.paymentStatus === 'PENDING' && (
-                  <button onClick={() => api(`/kyc/admin/${x._id}/payment`, { method: 'POST', body: '{}' }).then(load)}>
-                    Mark Payment Paid
-                  </button>
-                )}
-                {x.status === 'PENDING_REVIEW' && (
-                  <button className="primary" onClick={() => act(x._id, 'verify')}>Verify KYC</button>
-                )}
-                {x.status !== 'VERIFIED' && (
-                  <button className="danger" onClick={() => act(x._id, 'reject')}>Reject</button>
-                )}
+                {x.status === 'SUBMITTED' && <button className="primary" onClick={() => act(x.id, 'verify')}>Verify KYC</button>}
+                {x.status !== 'VERIFIED' && x.status !== 'REJECTED' && <button className="danger" onClick={() => act(x.id, 'reject')}>Reject</button>}
               </div>
             </div>
           ))}
