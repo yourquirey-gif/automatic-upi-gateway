@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
 import KycOrder from '../models/KycOrder.js';
-import GatewaySettings from '../models/GatewaySettings.js';
+import KycConfig from '../models/KycConfig.js';
 import User from '../models/User.js';
 import { requireAuth } from '../middleware/auth.js';
 import { encryptSecret } from '../utils/secretBox.js';
@@ -27,13 +27,18 @@ function validImage(value) {
 
 router.get('/config', async (_req, res, next) => {
   try {
-    const settings = await GatewaySettings.findOne({ key: 'global' });
+    const config = await KycConfig.findOneAndUpdate(
+      { key: 'global' },
+      {},
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
     res.json({
       status: true,
-      enabled: !!settings?.kycRequired,
-      fee: Number(settings?.kycFee ?? 50),
-      showPanField: settings?.showPanField !== false,
-      showAadhaarField: settings?.showAadhaarField !== false
+      enabled: !!config?.enabled,
+      required: !!config?.required,
+      fee: Number(config?.price ?? 50),
+      showPanField: config?.panField !== false,
+      showAadhaarField: config?.aadhaarField !== false
     });
   } catch (error) { next(error); }
 });
@@ -50,8 +55,13 @@ router.get('/me', async (req, res, next) => {
 
 router.post('/start', async (req, res, next) => {
   try {
-    const settings = await GatewaySettings.findOne({ key: 'global' });
-    if (!settings?.kycRequired) return res.status(400).json({ status: false, message: 'KYC is not currently required' });
+    const config = await KycConfig.findOneAndUpdate(
+      { key: 'global' },
+      {},
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    if (!config?.enabled) return res.status(400).json({ status: false, message: 'KYC is not currently enabled' });
+
     const user = await User.findById(req.auth.sub).select('kycStatus');
     if (user?.kycStatus === 'VERIFIED') return res.status(400).json({ status: false, message: 'KYC is already verified' });
 
@@ -59,16 +69,27 @@ router.post('/start', async (req, res, next) => {
     const aadhaarName = String(req.body.aadhaarName || '').trim();
     const panNumber = String(req.body.panNumber || '').trim().toUpperCase();
     const panName = String(req.body.panName || '').trim();
-    if (!/^\d{12}$/.test(aadhaarNumber) || !aadhaarName) return res.status(400).json({ status: false, message: 'Valid Aadhaar number and Aadhaar name are required' });
-    if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(panNumber) || !panName) return res.status(400).json({ status: false, message: 'Valid PAN number and PAN name are required' });
-    if (!validImage(req.body.aadhaarFront) || !validImage(req.body.aadhaarBack) || !validImage(req.body.panFront) || !validImage(req.body.panBack)) {
-      return res.status(400).json({ status: false, message: 'Aadhaar and PAN front/back images are required (JPG, PNG or WebP, max 3MB each)' });
+
+    if (!config.aadhaarField && (aadhaarNumber || aadhaarName || req.body.aadhaarFront || req.body.aadhaarBack)) {
+      return res.status(400).json({ status: false, message: 'Aadhaar field is disabled by administrator' });
+    }
+    if (!config.panField && (panNumber || panName || req.body.panFront || req.body.panBack)) {
+      return res.status(400).json({ status: false, message: 'PAN field is disabled by administrator' });
     }
 
-    const amount = Number(settings.kycFee ?? 50);
+    if (config.aadhaarField) {
+      if (!/^\d{12}$/.test(aadhaarNumber) || !aadhaarName) return res.status(400).json({ status: false, message: 'Valid Aadhaar number and Aadhaar name are required' });
+      if (!validImage(req.body.aadhaarFront) || !validImage(req.body.aadhaarBack)) return res.status(400).json({ status: false, message: 'Aadhaar front/back images are required' });
+    }
+    if (config.panField) {
+      if (!/^[A-Z]{5}\d{4}[A-Z]$/.test(panNumber) || !panName) return res.status(400).json({ status: false, message: 'Valid PAN number and PAN name are required' });
+      if (!validImage(req.body.panFront) || !validImage(req.body.panBack)) return res.status(400).json({ status: false, message: 'PAN front/back images are required' });
+    }
+
+    const amount = Number(config.price ?? 50);
     const orderId = `AGK${Date.now()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
-    const upiId = settings.kycUpiId || settings.subscriptionUpiId;
-    const upiName = settings.kycUpiName || settings.subscriptionUpiName || 'AutoGateway';
+    const upiId = String(config.paymentUpiId || '').trim();
+    const upiName = config.paymentName || 'AutoGateway';
     if (!upiId) return res.status(503).json({ status: false, message: 'KYC payment UPI ID is not configured by administrator' });
 
     await KycOrder.updateMany({ user: req.auth.sub, status: 'PENDING_PAYMENT' }, { $set: { status: 'EXPIRED' } });
@@ -80,14 +101,18 @@ router.post('/start', async (req, res, next) => {
       paymentUrl,
       aadhaarNumberEncrypted: encryptSecret(aadhaarNumber),
       aadhaarNameEncrypted: encryptSecret(aadhaarName),
-      aadhaarFrontEncrypted: encryptSecret(req.body.aadhaarFront),
-      aadhaarBackEncrypted: encryptSecret(req.body.aadhaarBack),
+      aadhaarFrontEncrypted: encryptSecret(req.body.aadhaarFront || ''),
+      aadhaarBackEncrypted: encryptSecret(req.body.aadhaarBack || ''),
       panNumberEncrypted: encryptSecret(panNumber),
       panNameEncrypted: encryptSecret(panName),
-      panFrontEncrypted: encryptSecret(req.body.panFront),
-      panBackEncrypted: encryptSecret(req.body.panBack)
+      panFrontEncrypted: encryptSecret(req.body.panFront || ''),
+      panBackEncrypted: encryptSecret(req.body.panBack || '')
     });
-    await User.findByIdAndUpdate(req.auth.sub, { kycStatus: 'PENDING_PAYMENT', panNumber, aadhaarNumber });
+    await User.findByIdAndUpdate(req.auth.sub, {
+      kycStatus: 'PENDING_PAYMENT',
+      ...(config.panField ? { panNumber } : {}),
+      ...(config.aadhaarField ? { aadhaarNumber } : {})
+    });
     res.status(201).json({ status: true, request: { orderId, amount, paymentUrl, status: request.status } });
   } catch (error) { next(error); }
 });
