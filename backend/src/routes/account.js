@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import bcrypt from 'bcryptjs';
 import User from '../models/User.js';
 import KycConfig from '../models/KycConfig.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -27,9 +28,7 @@ router.get('/', async (req, res, next) => {
     }
 
     const config = await KycConfig.findOneAndUpdate(
-      { key: 'global' },
-      {},
-      { upsert: true, new: true, setDefaultsOnInsert: true }
+      { key: 'global' }, {}, { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
     res.json({
@@ -52,6 +51,29 @@ router.put('/', async (req, res, next) => {
     const patch = Object.fromEntries(allowed.filter(k => k in req.body).map(k => [k, req.body[k]]));
     const user = await User.findByIdAndUpdate(req.auth.sub, patch, { new: true, runValidators: true }).select('-passwordHash');
     res.json({ status: true, user });
+  } catch (error) { next(error); }
+});
+
+router.put('/password', async (req, res, next) => {
+  try {
+    const currentPassword = String(req.body?.currentPassword || '');
+    const newPassword = String(req.body?.newPassword || '');
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ status: false, message: 'Current password and new password are required' });
+    }
+    if (newPassword.length < 8) {
+      return res.status(400).json({ status: false, message: 'New password must be at least 8 characters' });
+    }
+    const user = await User.findById(req.auth.sub).select('+passwordHash');
+    if (!user) return res.status(404).json({ status: false, message: 'User not found' });
+    const matches = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!matches) return res.status(401).json({ status: false, message: 'Current password is incorrect' });
+    if (await bcrypt.compare(newPassword, user.passwordHash)) {
+      return res.status(400).json({ status: false, message: 'New password must be different from the current password' });
+    }
+    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    await user.save();
+    res.json({ status: true, message: 'Password changed successfully' });
   } catch (error) { next(error); }
 });
 
