@@ -11,6 +11,7 @@ import ApiPage from './ApiPage.jsx';
 import MerchantApkPage from './MerchantApkPage.jsx';
 import VideoMerchant from './VideoMerchant.jsx';
 import Documentation from './Documentation.jsx';
+import SupportTicketPage from './SupportTicketPage.jsx';
 import { api } from './api';
 import './styles.css';
 import './dashboard.css';
@@ -28,6 +29,7 @@ function Root() {
   if (hash === '#dashboard/apk') return <MerchantApkPage />;
   if (hash === '#dashboard/video') return <KycGate><VideoMerchant /></KycGate>;
   if (hash === '#dashboard/docs') return <KycGate><Documentation /></KycGate>;
+  if (hash === '#dashboard/support') return <KycGate><SupportTicketPage /></KycGate>;
   if (hash === '#subscription' || hash === '#dashboard/subscription') return <KycGate><SubscriptionPage /></KycGate>;
   if (hash === '#dashboard/transactions') return <KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate>;
   if (hash === '#dashboard/checkout') return <KycGate><CheckoutPage /></KycGate>;
