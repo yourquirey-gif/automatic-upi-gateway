@@ -1,5 +1,13 @@
 import mongoose from 'mongoose';
 
+const merchantVideoSchema = new mongoose.Schema({
+  id: { type: String, trim: true },
+  title: { type: String, trim: true, maxlength: 120 },
+  url: { type: String, trim: true, maxlength: 500 },
+  active: { type: Boolean, default: true },
+  order: { type: Number, default: 0 }
+}, { _id: false });
+
 const gatewaySettingsSchema = new mongoose.Schema({
   key: { type: String, default: 'global', unique: true },
   settlementUpiId: { type: String, trim: true, default: '' },
@@ -17,7 +25,8 @@ const gatewaySettingsSchema = new mongoose.Schema({
   gmailPaymentVerificationEnabled: { type: Boolean, default: false },
   gmailSearchQuery: { type: String, default: 'newer_than:2d' },
   paymentVerificationMode: { type: String, enum: ['gmail', 'provider_webhook', 'manual'], default: 'gmail' },
-  feeSettlementMode: { type: String, enum: ['provider_split', 'ledger', 'manual'], default: 'ledger' }
+  feeSettlementMode: { type: String, enum: ['provider_split', 'ledger', 'manual'], default: 'ledger' },
+  merchantVideos: { type: [merchantVideoSchema], default: [] }
 }, { timestamps: true });
 
 export default mongoose.model('GatewaySettings', gatewaySettingsSchema);
