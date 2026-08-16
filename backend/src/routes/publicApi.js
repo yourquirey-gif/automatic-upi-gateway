@@ -32,7 +32,7 @@ function makeOrderId() {
   return `${Date.now()}${crypto.randomBytes(4).toString('hex')}`.slice(0, 24);
 }
 
-function buildPaymentUrl(req, order, merchant) {
+function buildPaymentUrl(req, order) {
   const base = String(process.env.PUBLIC_API_BASE_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
   return `${base}/api/payment/${encodeURIComponent(order.orderId)}`;
 }
@@ -54,13 +54,9 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
     const remark2 = cleanString(req.body?.remark2, 200);
     const requestedOrderId = cleanString(req.body?.order_id || req.body?.orderId, 100);
 
-    if (!Number.isFinite(amount) || amount <= 0) {
-      return res.status(400).json({ status: false, message: 'amount must be a positive number' });
-    }
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ status: false, message: 'amount must be a positive number' });
     if (amount > 1000000) return res.status(400).json({ status: false, message: 'amount exceeds the allowed limit' });
-    if (redirectUrl && !/^https?:\/\//i.test(redirectUrl)) {
-      return res.status(400).json({ status: false, message: 'redirect_url must include http or https' });
-    }
+    if (redirectUrl && !/^https?:\/\//i.test(redirectUrl)) return res.status(400).json({ status: false, message: 'redirect_url must include http or https' });
 
     const merchantId = cleanString(req.body?.merchant_id || req.body?.merchantId, 100);
     const merchantQuery = { owner: req.apiUser._id, status: 'active' };
@@ -88,18 +84,22 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
       paymentUrl: ''
     });
 
-    order.paymentUrl = buildPaymentUrl(req, order, merchant);
+    order.paymentUrl = buildPaymentUrl(req, order);
     await order.save();
+    const upiUrl = buildUpiUrl(order, merchant);
 
     res.status(201).json({
       status: true,
-      message: 'Payment order created successfully',
+      message: 'Order Created Successfully',
       result: {
         txnStatus: 'PENDING',
         orderId: order.orderId,
+        order_id: order.orderId,
         amount: order.amount.toFixed(2),
         paymentUrl: order.paymentUrl,
-        upiUrl: buildUpiUrl(order, merchant),
+        payment_url: order.paymentUrl,
+        upiUrl,
+        upi_url: upiUrl,
         redirectUrl: order.redirectUrl || null,
         customerMobile: order.customerMobile || null,
         remark1: order.remark1 || null,
@@ -121,6 +121,7 @@ router.post('/check-order-status', requireApiUser, async (req, res, next) => {
       result: {
         txnStatus: order.status,
         orderId: order.orderId,
+        order_id: order.orderId,
         amount: Number(order.amount).toFixed(2),
         date: order.paidAt || order.createdAt,
         utr: order.utr || null,
