@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="Automatic UPI Payment Gateway">
+  <title>UPI Gateway — Merchant Panel</title>
+  <link rel="stylesheet" href="./gateway.css">
+</head>
+<body>
+  <div class="shell">
+    <aside id="sidebar"><div class="brand"><span>U</span><b>UPI Gateway</b></div><nav id="nav">
+      <button class="active" data-page="Dashboard">⌂ <span>Dashboard</span></button>
+      <button data-page="Merchants">▣ <span>Merchants</span></button>
+      <button data-page="Payment Links">↗ <span>Payment Links</span></button>
+      <button data-page="Transactions">▤ <span>Transactions</span></button>
+      <button data-page="API & Webhooks">⌘ <span>API & Webhooks</span></button>
+      <button data-page="Security">◈ <span>Security</span></button>
+      <button data-page="Settings">⚙ <span>Settings</span></button>
+    </nav><div class="plan"><b>Starter Plan</b><small>Gateway access active</small><div class="bar"><i></i></div><small>Usage <strong>42%</strong></small></div></aside>
+    <main><header><button id="menu">☰</button><div>Merchant Panel <em>/</em> <b id="crumb">Dashboard</b></div><div class="account">● <b>Merchant</b></div></header><section id="app"></section></main>
+  </div>
+  <script src="./gateway.js"></script>
+</body>
+</html>
