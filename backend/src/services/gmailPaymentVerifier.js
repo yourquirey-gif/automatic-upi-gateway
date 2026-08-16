@@ -2,15 +2,12 @@ import { google } from 'googleapis';
 import GmailConnection from '../models/GmailConnection.js';
 import GatewaySettings from '../models/GatewaySettings.js';
 import Order from '../models/Order.js';
+import SubscriptionOrder from '../models/SubscriptionOrder.js';
+import User from '../models/User.js';
 import { decryptSecret } from '../utils/secretBox.js';
 
 function oauthClient() {
-  const client = new google.auth.OAuth2(
-    process.env.GOOGLE_CLIENT_ID,
-    process.env.GOOGLE_CLIENT_SECRET,
-    process.env.GOOGLE_REDIRECT_URI
-  );
-  return client;
+  return new google.auth.OAuth2(process.env.GOOGLE_CLIENT_ID, process.env.GOOGLE_CLIENT_SECRET, process.env.GOOGLE_REDIRECT_URI);
 }
 
 function decodeBody(data) {
@@ -39,23 +36,27 @@ function amountMatches(text, amount) {
   return new RegExp(`(?:₹|INR|Rs\\.?)[\\s:]*${value.replace('.', '[.]')}(?!\\d)`, 'i').test(normalized) || normalized.includes(value);
 }
 
+function expiryFrom(start, days) {
+  return new Date(new Date(start).getTime() + Number(days) * 86400000);
+}
+
 export async function verifyPendingOrdersForAdmin(ownerId) {
   const connection = await GmailConnection.findOne({ owner: ownerId, active: true }).select('+refreshTokenEncrypted');
-  if (!connection) return { checked: 0, confirmed: 0, reason: 'gmail_not_connected' };
-
+  if (!connection) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, reason: 'gmail_not_connected' };
   const settings = await GatewaySettings.findOne({ key: 'global' });
-  if (settings && settings.gmailPaymentVerificationEnabled === false) return { checked: 0, confirmed: 0, reason: 'gmail_verification_disabled' };
+  if (settings?.gmailPaymentVerificationEnabled === false) return { checked: 0, confirmed: 0, subscriptionsActivated: 0, reason: 'gmail_verification_disabled' };
 
   const client = oauthClient();
   client.setCredentials({ refresh_token: decryptSecret(connection.refreshTokenEncrypted) });
   const gmail = google.gmail({ version: 'v1', auth: client });
-  const query = settings?.gmailSearchQuery || 'newer_than:2d';
-  const listed = await gmail.users.messages.list({ userId: 'me', q: query, maxResults: 100 });
+  const listed = await gmail.users.messages.list({ userId: 'me', q: settings?.gmailSearchQuery || 'newer_than:2d', maxResults: 100 });
   const ids = (listed.data.messages || []).map((m) => m.id).filter(Boolean);
-  if (!ids.length) return { checked: 0, confirmed: 0 };
+  if (!ids.length) return { checked: 0, confirmed: 0, subscriptionsActivated: 0 };
 
-  const pending = await Order.find({ owner: ownerId, status: 'PENDING' }).sort({ createdAt: 1 }).limit(200);
+  const pending = await Order.find({ owner: ownerId, status: 'PENDING' }).limit(200);
+  const subscriptions = await SubscriptionOrder.find({ status: 'PENDING', user: ownerId }).populate('plan').limit(100);
   let confirmed = 0;
+  let subscriptionsActivated = 0;
 
   for (const id of ids) {
     const message = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
@@ -63,31 +64,31 @@ export async function verifyPendingOrdersForAdmin(ownerId) {
     const utr = extractUtr(text);
 
     for (const order of pending) {
-      if (order.status !== 'PENDING') continue;
-      const exactId = text.toLowerCase().includes(String(order.orderId).toLowerCase());
-      if (!exactId || !amountMatches(text, order.amount)) continue;
-
+      if (order.status !== 'PENDING' || !text.toLowerCase().includes(order.orderId.toLowerCase()) || !amountMatches(text, order.amount)) continue;
       const fee = Number((order.amount * (order.feePercent || 0) / 100).toFixed(2));
-      order.status = 'SUCCESS';
-      order.paidAt = new Date();
-      order.utr = utr || order.utr;
-      order.feeAmount = fee;
-      order.netAmount = Number((order.amount - fee).toFixed(2));
+      order.status = 'SUCCESS'; order.paidAt = new Date(); order.utr = utr || order.utr;
+      order.feeAmount = fee; order.netAmount = Number((order.amount - fee).toFixed(2));
       order.feeSettlementStatus = fee > 0 ? 'PENDING' : 'NOT_APPLICABLE';
-      order.verificationSource = 'gmail';
-      order.verificationMessageId = id;
-      await order.save();
-      confirmed += 1;
-      break;
+      order.verificationSource = 'gmail'; order.verificationMessageId = id;
+      await order.save(); confirmed += 1;
+    }
+
+    for (const sub of subscriptions) {
+      if (sub.status !== 'PENDING' || !text.toLowerCase().includes(sub.orderId.toLowerCase()) || !amountMatches(text, sub.amount)) continue;
+      const started = new Date();
+      const expires = expiryFrom(started, sub.plan.durationDays);
+      sub.status = 'SUCCESS'; sub.paidAt = started; sub.utr = utr || sub.utr;
+      sub.planActivatedAt = started; sub.planExpiresAt = expires;
+      sub.verificationSource = 'gmail'; sub.verificationMessageId = id;
+      await sub.save();
+      await User.findByIdAndUpdate(sub.user, { plan: sub.plan._id, trialStartedAt: started, trialEndsAt: expires });
+      subscriptionsActivated += 1;
     }
   }
 
-  connection.lastCheckedAt = new Date();
-  connection.lastMessageId = ids[0] || connection.lastMessageId;
+  connection.lastCheckedAt = new Date(); connection.lastMessageId = ids[0] || connection.lastMessageId;
   await connection.save();
-  return { checked: ids.length, confirmed };
+  return { checked: ids.length, confirmed, subscriptionsActivated };
 }
 
-export function createGoogleClient() {
-  return oauthClient();
-}
+export function createGoogleClient() { return oauthClient(); }
