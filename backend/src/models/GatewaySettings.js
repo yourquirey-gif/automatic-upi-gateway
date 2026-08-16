@@ -4,6 +4,8 @@ const gatewaySettingsSchema = new mongoose.Schema({
   key: { type: String, default: 'global', unique: true },
   settlementUpiId: { type: String, trim: true, default: '' },
   settlementName: { type: String, trim: true, default: '' },
+  subscriptionUpiId: { type: String, trim: true, default: '' },
+  subscriptionUpiName: { type: String, trim: true, default: '' },
   subscriptionPaymentLink: { type: String, trim: true, default: '' },
   defaultTransactionFeePercent: { type: Number, min: 0, max: 100, default: 0 },
   gmailPaymentVerificationEnabled: { type: Boolean, default: false },
