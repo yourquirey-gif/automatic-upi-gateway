@@ -54,7 +54,7 @@ export async function verifyPendingOrdersForAdmin(ownerId) {
   if (!ids.length) return { checked: 0, confirmed: 0, subscriptionsActivated: 0 };
 
   const pending = await Order.find({ owner: ownerId, status: 'PENDING' }).limit(200);
-  const subscriptions = await SubscriptionOrder.find({ status: 'PENDING', user: ownerId }).populate('plan').limit(100);
+  const subscriptions = await SubscriptionOrder.find({ status: 'PENDING', user: { $exists: true } }).populate('plan').limit(200);
   let confirmed = 0;
   let subscriptionsActivated = 0;
 
@@ -81,7 +81,14 @@ export async function verifyPendingOrdersForAdmin(ownerId) {
       sub.planActivatedAt = started; sub.planExpiresAt = expires;
       sub.verificationSource = 'gmail'; sub.verificationMessageId = id;
       await sub.save();
-      await User.findByIdAndUpdate(sub.user, { plan: sub.plan._id, trialStartedAt: started, trialEndsAt: expires });
+      await User.findByIdAndUpdate(sub.user, {
+        plan: sub.plan._id,
+        planStartedAt: started,
+        planExpiresAt: expires,
+        planStatus: 'ACTIVE',
+        trialStartedAt: started,
+        trialEndsAt: expires
+      });
       subscriptionsActivated += 1;
     }
   }
