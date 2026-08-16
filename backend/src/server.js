@@ -9,6 +9,7 @@ import adminRoutes from './routes/admin.js';
 import gmailRoutes from './routes/gmail.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import User from './models/User.js';
+import SubscriptionOrder from './models/SubscriptionOrder.js';
 import { verifyPendingOrdersForAdmin } from './services/gmailPaymentVerifier.js';
 
 const app = express();
@@ -30,9 +31,40 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ status: false, message: 'Internal server error' });
 });
 
+async function expireSubscriptions() {
+  const now = new Date();
+  const expiredUsers = await User.find({
+    plan: { $ne: null },
+    planExpiresAt: { $ne: null, $lte: now },
+    planStatus: 'ACTIVE'
+  }).select('_id plan');
+
+  if (!expiredUsers.length) return 0;
+
+  for (const user of expiredUsers) {
+    await SubscriptionOrder.updateMany(
+      { user: user._id, plan: user.plan, status: 'SUCCESS', planExpiresAt: { $lte: now } },
+      { $set: { status: 'EXPIRED' } }
+    );
+    await User.updateOne(
+      { _id: user._id },
+      { $set: { plan: null, planStatus: 'EXPIRED' } }
+    );
+  }
+  return expiredUsers.length;
+}
+
 connectDatabase()
   .then(async () => {
     app.listen(port, () => console.log(`API listening on port ${port}`));
+
+    // Expiry is enforced immediately when /subscriptions/me is requested and
+    // also by this server-side job, so an expired plan cannot remain active.
+    await expireSubscriptions().catch((error) => console.error('Initial expiry check failed:', error.message));
+    setInterval(() => {
+      expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message));
+    }, Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
+
     if (process.env.GMAIL_AUTO_SYNC === 'true') {
       setInterval(async () => {
         try {
