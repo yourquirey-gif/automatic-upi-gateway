@@ -15,7 +15,7 @@ router.get('/settings', async (_req, res, next) => {
 
 router.put('/settings', async (req, res, next) => {
   try {
-    const allowed = ['settlementUpiId', 'settlementName', 'defaultTransactionFeePercent', 'gmailPaymentVerificationEnabled', 'gmailSearchQuery', 'paymentVerificationMode', 'feeSettlementMode'];
+    const allowed = ['settlementUpiId', 'settlementName', 'subscriptionPaymentLink', 'defaultTransactionFeePercent', 'gmailPaymentVerificationEnabled', 'gmailSearchQuery', 'paymentVerificationMode', 'feeSettlementMode'];
     const patch = Object.fromEntries(allowed.filter((key) => key in req.body).map((key) => [key, req.body[key]]));
     const settings = await GatewaySettings.findOneAndUpdate({ key: 'global' }, patch, { upsert: true, new: true, setDefaultsOnInsert: true });
     res.json({ status: true, settings });
