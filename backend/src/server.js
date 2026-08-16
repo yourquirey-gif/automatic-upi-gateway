@@ -8,6 +8,8 @@ import merchantRoutes from './routes/merchants.js';
 import adminRoutes from './routes/admin.js';
 import gmailRoutes from './routes/gmail.js';
 import subscriptionRoutes from './routes/subscriptions.js';
+import accountRoutes from './routes/account.js';
+import kycRoutes from './routes/kyc.js';
 import User from './models/User.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import { verifyPendingOrdersForAdmin } from './services/gmailPaymentVerifier.js';
@@ -16,7 +18,7 @@ const app = express();
 const port = Number(process.env.PORT || 5000);
 app.use(helmet());
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '15mb' }));
 
 app.get('/health', (_req, res) => res.json({ ok: true, service: 'automatic-upi-gateway-api' }));
 app.get('/api/v1', (_req, res) => res.json({ name: 'Automatic UPI Gateway API', version: 'v1' }));
@@ -25,6 +27,8 @@ app.use('/api/v1/merchants', merchantRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/gmail', gmailRoutes);
 app.use('/api/v1/subscriptions', subscriptionRoutes);
+app.use('/api/v1/account', accountRoutes);
+app.use('/api/v1/kyc', kycRoutes);
 
 app.use((err, _req, res, _next) => {
   console.error(err);
@@ -33,23 +37,11 @@ app.use((err, _req, res, _next) => {
 
 async function expireSubscriptions() {
   const now = new Date();
-  const expiredUsers = await User.find({
-    plan: { $ne: null },
-    planExpiresAt: { $ne: null, $lte: now },
-    planStatus: 'ACTIVE'
-  }).select('_id plan');
-
+  const expiredUsers = await User.find({ plan: { $ne: null }, planExpiresAt: { $ne: null, $lte: now }, planStatus: 'ACTIVE' }).select('_id plan');
   if (!expiredUsers.length) return 0;
-
   for (const user of expiredUsers) {
-    await SubscriptionOrder.updateMany(
-      { user: user._id, plan: user.plan, status: 'SUCCESS', planExpiresAt: { $lte: now } },
-      { $set: { status: 'EXPIRED' } }
-    );
-    await User.updateOne(
-      { _id: user._id },
-      { $set: { plan: null, planStatus: 'EXPIRED' } }
-    );
+    await SubscriptionOrder.updateMany({ user: user._id, plan: user.plan, status: 'SUCCESS', planExpiresAt: { $lte: now } }, { $set: { status: 'EXPIRED' } });
+    await User.updateOne({ _id: user._id }, { $set: { plan: null, planStatus: 'EXPIRED' } });
   }
   return expiredUsers.length;
 }
@@ -57,14 +49,8 @@ async function expireSubscriptions() {
 connectDatabase()
   .then(async () => {
     app.listen(port, () => console.log(`API listening on port ${port}`));
-
-    // Expiry is enforced immediately when /subscriptions/me is requested and
-    // also by this server-side job, so an expired plan cannot remain active.
     await expireSubscriptions().catch((error) => console.error('Initial expiry check failed:', error.message));
-    setInterval(() => {
-      expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message));
-    }, Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
-
+    setInterval(() => expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message)), Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
     if (process.env.GMAIL_AUTO_SYNC === 'true') {
       setInterval(async () => {
         try {
