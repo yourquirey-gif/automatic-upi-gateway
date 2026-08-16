@@ -19,7 +19,7 @@ export default function SubscriptionPage() {
 
   const buy = async (plan) => {
     if (!localStorage.getItem('gateway_access_token')) {
-      window.location.hash = 'login';
+      window.location.href = '/#login';
       return;
     }
     setBusy(plan._id);
