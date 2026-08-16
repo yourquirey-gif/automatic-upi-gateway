@@ -2,6 +2,8 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import { connectDatabase } from './config/database.js';
+import merchantRoutes from './routes/merchants.js';
 
 const app = express();
 const port = Number(process.env.PORT || 5000);
@@ -18,11 +20,16 @@ app.get('/api/v1', (_req, res) => {
   res.json({ name: 'Automatic UPI Gateway API', version: 'v1' });
 });
 
+app.use('/api/v1/merchants', merchantRoutes);
+
 app.use((err, _req, res, _next) => {
   console.error(err);
   res.status(500).json({ status: false, message: 'Internal server error' });
 });
 
-app.listen(port, () => {
-  console.log(`API listening on port ${port}`);
-});
+connectDatabase()
+  .then(() => app.listen(port, () => console.log(`API listening on port ${port}`)))
+  .catch((error) => {
+    console.error('Database connection failed:', error.message);
+    process.exit(1);
+  });
