@@ -3,6 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import { connectDatabase } from './config/database.js';
+import authRoutes from './routes/auth.js';
 import merchantRoutes from './routes/merchants.js';
 
 const app = express();
@@ -20,6 +21,7 @@ app.get('/api/v1', (_req, res) => {
   res.json({ name: 'Automatic UPI Gateway API', version: 'v1' });
 });
 
+app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/merchants', merchantRoutes);
 
 app.use((err, _req, res, _next) => {
