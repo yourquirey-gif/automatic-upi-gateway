@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import User from '../models/User.js';
-import GatewaySettings from '../models/GatewaySettings.js';
+import KycConfig from '../models/KycConfig.js';
 import { requireAuth } from '../middleware/auth.js';
 
 const router = Router();
@@ -8,18 +8,24 @@ router.use(requireAuth);
 
 router.get('/', async (req, res, next) => {
   try {
-    const [user, settings] = await Promise.all([
+    const [user, config] = await Promise.all([
       User.findById(req.auth.sub).select('-passwordHash'),
-      GatewaySettings.findOne({ key: 'global' })
+      KycConfig.findOneAndUpdate(
+        { key: 'global' },
+        {},
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      )
     ]);
+
     res.json({
       status: true,
       user,
       settings: {
-        kycRequired: !!settings?.kycRequired,
-        kycFee: Number(settings?.kycFee ?? 50),
-        showPanField: settings?.showPanField !== false,
-        showAadhaarField: settings?.showAadhaarField !== false
+        showPanField: config?.panField !== false,
+        showAadhaarField: config?.aadhaarField !== false,
+        kycEnabled: !!config?.enabled,
+        kycRequired: !!config?.required,
+        kycFee: Number(config?.price ?? 50)
       }
     });
   } catch (error) { next(error); }
