@@ -7,6 +7,7 @@ import SubscriptionPage from './SubscriptionPage.jsx';
 import AccountPage from './AccountPage.jsx';
 import PasswordPage from './PasswordPage.jsx';
 import KycPage from './KycPage.jsx';
+import ApiPage from './ApiPage.jsx';
 import { api } from './api';
 import './styles.css';
 import './dashboard.css';
@@ -19,6 +20,7 @@ function Root() {
   if (hash === '#dashboard/account') return <AccountPage />;
   if (hash === '#dashboard/password') return <PasswordPage />;
   if (hash === '#dashboard/kyc') return <KycPage />;
+  if (hash === '#dashboard/api') return <ApiPage />;
   if (hash === '#subscription' || hash === '#dashboard/subscription') return <KycGate><SubscriptionPage /></KycGate>;
   if (hash === '#dashboard/transactions') return <KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate>;
   if (hash === '#dashboard/checkout') return <KycGate><CheckoutPage /></KycGate>;
