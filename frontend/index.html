@@ -12,10 +12,20 @@
     <title>OmniUPI — UPI Payment Gateway</title>
     <style>
       .hero-section{overflow:hidden}
-      .hero-section:before{content:"";position:absolute;z-index:1;right:5%;top:50%;width:min(46vw,600px);aspect-ratio:800/495;transform:translateY(-43%) rotate(3deg);background:url('/hero-card.svg') center/contain no-repeat;pointer-events:none}
+      .hero-section:before{content:"";position:absolute;z-index:1;right:4%;top:50%;width:min(44vw,570px);aspect-ratio:800/495;transform:translateY(-43%) rotate(2deg);background:url('/hero-card.svg') center/contain no-repeat;pointer-events:none}
       .hero-copy{z-index:2}
-      @media(max-width:1050px){.hero-section{padding-bottom:410px}.hero-section:before{right:50%;top:auto;bottom:38px;width:min(76vw,600px);transform:translateX(50%) rotate(0deg)}}
-      @media(max-width:760px){.hero-section{padding-bottom:340px}.hero-section:before{bottom:24px;width:calc(100vw - 40px)}}
+      @media(max-width:1050px){
+        .hero-section{padding-bottom:430px}
+        .hero-section:before{right:50%;top:auto;bottom:32px;width:min(78vw,570px);transform:translateX(50%) rotate(0deg)}
+      }
+      @media(max-width:760px){
+        .hero-section{padding-bottom:390px}
+        .hero-section:before{bottom:26px;width:calc(100vw - 44px);max-width:570px}
+      }
+      @media(max-width:430px){
+        .hero-section{padding-bottom:365px}
+        .hero-section:before{bottom:22px;width:calc(100vw - 30px)}
+      }
     </style>
   </head>
   <body>
@@ -36,6 +46,6 @@
         }
       },true);
     </script>
-    <script type="module" src="/src/main.jsx?v=20260817-5"></script>
+    <script type="module" src="/src/main.jsx?v=20260817-6"></script>
   </body>
 </html>
