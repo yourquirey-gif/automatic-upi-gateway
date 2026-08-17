@@ -22,4 +22,31 @@ router.post('/', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.get('/:merchantId/checkout', async (req, res, next) => {
+  try {
+    const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }).lean();
+    if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+    res.json({ status: true, merchantId: merchant._id, checkout: merchant.config?.checkout || {} });
+  } catch (error) { next(error); }
+});
+
+router.put('/:merchantId/checkout', async (req, res, next) => {
+  try {
+    const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
+    if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+    const body = req.body || {};
+    const checkout = {
+      brandName: String(body.brandName || merchant.name).trim().slice(0, 100),
+      themeColor: /^#[0-9a-fA-F]{6}$/.test(String(body.themeColor || '')) ? String(body.themeColor) : '#0B95BD',
+      instructions: String(body.instructions || '').slice(0, 3000),
+      showQrCode: body.showQrCode !== false,
+      showIntentButtons: body.showIntentButtons !== false,
+      brandLogo: typeof body.brandLogo === 'string' && body.brandLogo.length <= 1500000 ? body.brandLogo : ''
+    };
+    merchant.config = { ...(merchant.config || {}), checkout };
+    await merchant.save();
+    res.json({ status: true, checkout });
+  } catch (error) { next(error); }
+});
+
 export default router;
