@@ -2,6 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
+import bcrypt from 'bcryptjs';
 import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import merchantRoutes from './routes/merchants.js';
@@ -47,6 +48,34 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ status: false, message: 'Internal server error' });
 });
 
+async function ensureBootstrapAdmin() {
+  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
+  const password = String(process.env.ADMIN_PASSWORD || '');
+  if (!email || !password) {
+    console.log('Admin bootstrap skipped: ADMIN_EMAIL/ADMIN_PASSWORD not configured.');
+    return;
+  }
+  if (password.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
+  const existing = await User.findOne({ email }).select('+passwordHash');
+  if (!existing) {
+    const passwordHash = await bcrypt.hash(password, 12);
+    await User.create({ name: process.env.ADMIN_NAME || 'Administrator', email, passwordHash, role: 'admin', status: 'active', trialStartedAt: null, trialEndsAt: null, plan: null, planStatus: 'NONE' });
+    console.log(`Bootstrap admin created: ${email}`);
+    return;
+  }
+  if (existing.role !== 'admin') throw new Error(`ADMIN_EMAIL belongs to a non-admin account: ${email}`);
+  const passwordMatches = existing.passwordHash ? await bcrypt.compare(password, existing.passwordHash) : false;
+  if (!passwordMatches) {
+    existing.passwordHash = await bcrypt.hash(password, 12);
+    existing.status = 'active';
+    await existing.save({ validateBeforeSave: false });
+    console.log(`Bootstrap admin password synchronized: ${email}`);
+  } else if (existing.status !== 'active') {
+    existing.status = 'active';
+    await existing.save({ validateBeforeSave: false });
+  }
+}
+
 async function expireSubscriptions() {
   const now = new Date();
   const expiredUsers = await User.find({ plan: { $ne: null }, planExpiresAt: { $ne: null, $lte: now }, planStatus: 'ACTIVE' }).select('_id plan');
@@ -59,6 +88,7 @@ async function expireSubscriptions() {
 
 connectDatabase()
   .then(async () => {
+    await ensureBootstrapAdmin();
     app.listen(port, () => console.log(`API listening on port ${port}`));
     await expireSubscriptions().catch((error) => console.error('Initial expiry check failed:', error.message));
     setInterval(() => expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message)), Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
