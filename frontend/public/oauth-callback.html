@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Signing in — OmniUPI</title></head><body style="font-family:Inter,system-ui,sans-serif;display:grid;place-items:center;min-height:100vh;background:#f4f6ff;color:#202a3e"><main style="text-align:center"><h2>Completing Google sign-in…</h2><p id="msg">Please wait.</p></main><script>
+(function(){
+  const p=new URLSearchParams(location.search); const token=p.get('token'); const msg=document.getElementById('msg');
+  if(!token){msg.textContent='Google sign-in failed. Please try again.';return;}
+  localStorage.setItem('gateway_access_token',token);
+  msg.textContent='Signed in successfully. Redirecting…';
+  setTimeout(()=>{location.replace('/#dashboard')},250);
+})();
+</script></body></html>
