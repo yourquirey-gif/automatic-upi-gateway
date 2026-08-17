@@ -1,4 +1,5 @@
 import React,{useEffect,useMemo,useState} from 'react';
+import {createRoot} from 'react-dom/client';
 import {Activity,AlertTriangle,BarChart3,Check,ClipboardList,CircleDollarSign,CreditCard,Database,FileCheck,KeyRound,LayoutDashboard,LogOut,Mail,Menu,PlayCircle,RefreshCw,Save,Search,Server,Settings,ShieldCheck,Ticket,ToggleLeft,ToggleRight,Trash2,UserCog,Users,WalletCards,X} from 'lucide-react';
 import {adminApi,adminLogin} from './api';
 import './styles.css';
