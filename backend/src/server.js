@@ -48,6 +48,10 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ status: false, message: 'Internal server error' });
 });
 
+// Creates the first administrator from hosting-provider environment variables.
+// If the email already exists as a merchant, it is promoted only when the supplied
+// ADMIN_PASSWORD matches that existing account password. No production password is
+// stored in the repository.
 async function ensureBootstrapAdmin() {
   const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const password = String(process.env.ADMIN_PASSWORD || '');
@@ -56,23 +60,53 @@ async function ensureBootstrapAdmin() {
     return;
   }
   if (password.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
+
   const existing = await User.findOne({ email }).select('+passwordHash');
   if (!existing) {
     const passwordHash = await bcrypt.hash(password, 12);
-    await User.create({ name: process.env.ADMIN_NAME || 'Administrator', email, passwordHash, role: 'admin', status: 'active', trialStartedAt: null, trialEndsAt: null, plan: null, planStatus: 'NONE' });
+    await User.create({
+      name: process.env.ADMIN_NAME || 'Administrator',
+      email,
+      passwordHash,
+      role: 'admin',
+      status: 'active',
+      trialStartedAt: null,
+      trialEndsAt: null,
+      plan: null,
+      planStatus: 'NONE'
+    });
     console.log(`Bootstrap admin created: ${email}`);
     return;
   }
-  if (existing.role !== 'admin') throw new Error(`ADMIN_EMAIL belongs to a non-admin account: ${email}`);
+
   const passwordMatches = existing.passwordHash ? await bcrypt.compare(password, existing.passwordHash) : false;
   if (!passwordMatches) {
-    existing.passwordHash = await bcrypt.hash(password, 12);
+    throw new Error(`ADMIN_PASSWORD does not match the existing account: ${email}`);
+  }
+
+  let changed = false;
+  if (existing.role !== 'admin') {
+    existing.role = 'admin';
+    changed = true;
+  }
+  if (existing.status !== 'active') {
     existing.status = 'active';
+    changed = true;
+  }
+  if (existing.trialStartedAt || existing.trialEndsAt || existing.plan || existing.planStatus !== 'NONE') {
+    existing.trialStartedAt = null;
+    existing.trialEndsAt = null;
+    existing.plan = null;
+    existing.planStartedAt = null;
+    existing.planExpiresAt = null;
+    existing.planStatus = 'NONE';
+    changed = true;
+  }
+  if (changed) {
     await existing.save({ validateBeforeSave: false });
-    console.log(`Bootstrap admin password synchronized: ${email}`);
-  } else if (existing.status !== 'active') {
-    existing.status = 'active';
-    await existing.save({ validateBeforeSave: false });
+    console.log(`Bootstrap admin synchronized: ${email}`);
+  } else {
+    console.log(`Bootstrap admin verified: ${email}`);
   }
 }
 
