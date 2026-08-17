@@ -40,10 +40,10 @@ jobs:
               ("autogateway", "omniupi"),
           ]
 
-          skip_dirs = {".git", "node_modules", "dist", "build", ".github/workflows"}
+          skip_parts = {".git", ".github", "node_modules", "dist", "build"}
           changed = []
           for p in Path('.').rglob('*'):
-              if not p.is_file() or any(part in skip_dirs for part in p.parts):
+              if not p.is_file() or any(part in skip_parts for part in p.parts):
                   continue
               if p.suffix.lower() in {'.png','.jpg','.jpeg','.gif','.webp','.ico','.mp4','.mov','.avi','.mkv','.zip','.pdf','.woff','.woff2','.ttf','.otf'}:
                   continue
