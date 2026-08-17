@@ -4,7 +4,6 @@ on:
   push:
     branches: ["main"]
     paths:
-      - ".github/workflows/omniupi-brand.yml"
       - "**"
   workflow_dispatch:
 
@@ -41,7 +40,7 @@ jobs:
               ("autogateway", "omniupi"),
           ]
 
-          skip_dirs = {".git", "node_modules", "dist", "build"}
+          skip_dirs = {".git", "node_modules", "dist", "build", ".github/workflows"}
           changed = []
           for p in Path('.').rglob('*'):
               if not p.is_file() or any(part in skip_dirs for part in p.parts):
