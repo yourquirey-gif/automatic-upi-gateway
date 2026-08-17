@@ -15,6 +15,7 @@ import kycRoutes from './routes/kyc.js';
 import kycConfigRoutes from './routes/kycConfig.js';
 import videoRoutes from './routes/videos.js';
 import publicApiRoutes from './routes/publicApi.js';
+import checkoutRoutes from './routes/checkout.js';
 import supportRoutes from './routes/support.js';
 import User from './models/User.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
@@ -41,6 +42,7 @@ app.use('/api/v1/kyc', kycRoutes);
 app.use('/api/v1/kyc-config', kycConfigRoutes);
 app.use('/api/v1/videos', videoRoutes);
 app.use('/api/v1/support', supportRoutes);
+app.use('/api/v1/public-checkout', checkoutRoutes);
 app.use('/api', publicApiRoutes);
 
 app.use((err, _req, res, _next) => {
@@ -48,66 +50,24 @@ app.use((err, _req, res, _next) => {
   res.status(500).json({ status: false, message: 'Internal server error' });
 });
 
-// Creates the first administrator from hosting-provider environment variables.
-// If the email already exists as a merchant, it is promoted only when the supplied
-// ADMIN_PASSWORD matches that existing account password. No production password is
-// stored in the repository. Admin accounts are permanent and subscription-free.
 async function ensureBootstrapAdmin() {
   const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const password = String(process.env.ADMIN_PASSWORD || '');
-  if (!email || !password) {
-    console.log('Admin bootstrap skipped: ADMIN_EMAIL/ADMIN_PASSWORD not configured.');
-    return;
-  }
+  if (!email || !password) { console.log('Admin bootstrap skipped: ADMIN_EMAIL/ADMIN_PASSWORD not configured.'); return; }
   if (password.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
-
   const existing = await User.findOne({ email }).select('+passwordHash');
   if (!existing) {
     const passwordHash = await bcrypt.hash(password, 12);
-    await User.create({
-      name: process.env.ADMIN_NAME || 'Administrator',
-      email,
-      passwordHash,
-      role: 'admin',
-      status: 'active',
-      trialStartedAt: null,
-      trialEndsAt: null,
-      plan: null,
-      planStatus: 'NONE'
-    });
-    console.log(`Bootstrap admin created: ${email}`);
-    return;
+    await User.create({ name: process.env.ADMIN_NAME || 'Administrator', email, passwordHash, role: 'admin', status: 'active', trialStartedAt: null, trialEndsAt: null, plan: null, planStatus: 'NONE' });
+    console.log(`Bootstrap admin created: ${email}`); return;
   }
-
   const passwordMatches = existing.passwordHash ? await bcrypt.compare(password, existing.passwordHash) : false;
-  if (!passwordMatches) {
-    throw new Error(`ADMIN_PASSWORD does not match the existing account: ${email}`);
-  }
-
+  if (!passwordMatches) throw new Error(`ADMIN_PASSWORD does not match the existing account: ${email}`);
   let changed = false;
-  if (existing.role !== 'admin') {
-    existing.role = 'admin';
-    changed = true;
-  }
-  if (existing.status !== 'active') {
-    existing.status = 'active';
-    changed = true;
-  }
-  if (existing.trialStartedAt || existing.trialEndsAt || existing.plan || existing.planStatus !== 'NONE') {
-    existing.trialStartedAt = null;
-    existing.trialEndsAt = null;
-    existing.plan = null;
-    existing.planStartedAt = null;
-    existing.planExpiresAt = null;
-    existing.planStatus = 'NONE';
-    changed = true;
-  }
-  if (changed) {
-    await existing.save({ validateBeforeSave: false });
-    console.log(`Bootstrap admin synchronized: ${email}`);
-  } else {
-    console.log(`Bootstrap admin verified: ${email}`);
-  }
+  if (existing.role !== 'admin') { existing.role = 'admin'; changed = true; }
+  if (existing.status !== 'active') { existing.status = 'active'; changed = true; }
+  if (existing.trialStartedAt || existing.trialEndsAt || existing.plan || existing.planStatus !== 'NONE') { existing.trialStartedAt = null; existing.trialEndsAt = null; existing.plan = null; existing.planStartedAt = null; existing.planExpiresAt = null; existing.planStatus = 'NONE'; changed = true; }
+  if (changed) await existing.save({ validateBeforeSave: false });
 }
 
 async function expireSubscriptions() {
@@ -126,16 +86,6 @@ connectDatabase()
     app.listen(port, () => console.log(`OmniUPI API listening on port ${port}`));
     await expireSubscriptions().catch((error) => console.error('Initial expiry check failed:', error.message));
     setInterval(() => expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message)), Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
-    if (process.env.GMAIL_AUTO_SYNC === 'true') {
-      setInterval(async () => {
-        try {
-          const result = await verifyAllConnectedGmails();
-          if (result.confirmed || result.subscriptionsActivated || result.kycPaymentsConfirmed) console.log('Gmail verification:', result);
-        } catch (error) { console.error('Gmail sync failed:', error.message); }
-      }, Number(process.env.GMAIL_SYNC_INTERVAL_MS || 60000));
-    }
+    if (process.env.GMAIL_AUTO_SYNC === 'true') setInterval(async () => { try { const result = await verifyAllConnectedGmails(); if (result.confirmed) console.log('Gmail verification:', result); } catch (error) { console.error('Gmail sync failed:', error.message); } }, Number(process.env.GMAIL_SYNC_INTERVAL_MS || 60000));
   })
-  .catch((error) => {
-    console.error('Database connection failed:', error.message);
-    process.exit(1);
-  });
+  .catch((error) => { console.error('Database connection failed:', error.message); process.exit(1); });
