@@ -1,7 +1,8 @@
 {
-  "name": "automatic-upi-gateway-api",
-  "version": "0.4.0",
+  "name": "omniupi-api",
+  "version": "1.0.0",
   "private": true,
+  "description": "OmniUPI payment gateway API",
   "type": "module",
   "scripts": {
     "dev": "node --watch src/server.js",
