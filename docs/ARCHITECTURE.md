@@ -1,14 +1,31 @@
-# Gateway Architecture
+# OmniUPI Architecture
+
+## Production domains
+
+- Website / merchant panel: `https://omniupi.in`
+- API: `https://api.omniupi.in`
+- Admin panel: `https://admin.omniupi.in`
+- Documentation: `https://omniupi.in/docs`
 
 ## Panels
 
 - Merchant panel: account, merchants, payment links, transactions, API/webhooks, plans and support.
 - Admin panel: users, merchants, payment configuration, transactions, plans, security, support and audit views.
 
+## API
+
+All merchant/admin application API requests use:
+
+`https://api.omniupi.in/api/v1`
+
+Health check:
+
+`https://api.omniupi.in/health`
+
 ## Payment lifecycle
 
-1. Merchant creates an order through the server-side API.
-2. Gateway creates a pending transaction and a hosted checkout/payment URL.
+1. Merchant creates an order through the OmniUPI server-side API.
+2. OmniUPI creates a pending transaction and a hosted checkout/payment URL.
 3. Customer completes payment using an enabled and authorized payment method.
 4. A provider-authorized verification mechanism confirms the transaction.
 5. The transaction is updated idempotently with the verified amount/reference.
