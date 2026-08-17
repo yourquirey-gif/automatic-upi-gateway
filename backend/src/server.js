@@ -18,6 +18,7 @@ import publicApiRoutes from './routes/publicApi.js';
 import checkoutRoutes from './routes/checkout.js';
 import supportRoutes from './routes/support.js';
 import User from './models/User.js';
+import GatewaySettings from './models/GatewaySettings.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import { verifyAllConnectedGmails } from './services/gmailPaymentVerifier.js';
 
@@ -36,14 +37,11 @@ async function ensureBootstrapAdmin(){
   let existing=await User.findOne({email}).select('+passwordHash');
   if(!existing){const passwordHash=await bcrypt.hash(password,12);await User.create({name:process.env.ADMIN_NAME||'Administrator',email,passwordHash,role:'admin',status:'active',trialStartedAt:null,trialEndsAt:null,plan:null,planStatus:'NONE'});console.log(`Bootstrap admin created: ${email}`);return;}
   let changed=false;
-  if(existing.role!=='admin'){existing.role='admin';changed=true;}
-  if(existing.status!=='active'){existing.status='active';changed=true;}
-  const passwordMatches=existing.passwordHash?await bcrypt.compare(password,existing.passwordHash):false;
-  if(!passwordMatches){existing.passwordHash=await bcrypt.hash(password,12);changed=true;}
+  if(existing.role!=='admin'){existing.role='admin';changed=true;} if(existing.status!=='active'){existing.status='active';changed=true;}
+  const passwordMatches=existing.passwordHash?await bcrypt.compare(password,existing.passwordHash):false; if(!passwordMatches){existing.passwordHash=await bcrypt.hash(password,12);changed=true;}
   if(existing.trialStartedAt||existing.trialEndsAt||existing.plan||existing.planStatus!=='NONE'||existing.planStartedAt||existing.planExpiresAt){existing.trialStartedAt=null;existing.trialEndsAt=null;existing.plan=null;existing.planStartedAt=null;existing.planExpiresAt=null;existing.planStatus='NONE';changed=true;}
-  if(process.env.ADMIN_NAME&&existing.name!==process.env.ADMIN_NAME){existing.name=process.env.ADMIN_NAME;changed=true;}
-  if(changed)await existing.save({validateBeforeSave:false});
-  console.log(`Bootstrap admin ready: ${email}`);
+  if(process.env.ADMIN_NAME&&existing.name!==process.env.ADMIN_NAME){existing.name=process.env.ADMIN_NAME;changed=true;} if(changed)await existing.save({validateBeforeSave:false}); console.log(`Bootstrap admin ready: ${email}`);
 }
 async function expireSubscriptions(){const now=new Date();const expiredUsers=await User.find({role:'merchant',plan:{$ne:null},planExpiresAt:{$ne:null,$lte:now},planStatus:'ACTIVE'}).select('_id plan');for(const user of expiredUsers){await SubscriptionOrder.updateMany({user:user._id,plan:user.plan,status:'SUCCESS',planExpiresAt:{$lte:now}},{$set:{status:'EXPIRED'}});await User.updateOne({_id:user._id},{$set:{plan:null,planStatus:'EXPIRED'}});}return expiredUsers.length;}
-connectDatabase().then(async()=>{await ensureBootstrapAdmin();app.listen(port,()=>console.log(`OmniUPI API listening on port ${port}`));await expireSubscriptions().catch(e=>console.error('Initial expiry check failed:',e.message));setInterval(()=>expireSubscriptions().catch(e=>console.error('Subscription expiry check failed:',e.message)),Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS||60000));if(process.env.GMAIL_AUTO_SYNC==='true')setInterval(async()=>{try{const result=await verifyAllConnectedGmails();if(result.confirmed)console.log('Gmail verification:',result)}catch(e){console.error('Gmail sync failed:',e.message)}},Number(process.env.GMAIL_SYNC_INTERVAL_MS||60000));}).catch(e=>{console.error('Database connection failed:',e.message);process.exit(1)});
+async function gmailAutoSyncTick(){const settings=await GatewaySettings.findOne({key:'global'}).lean();const enabled=settings?.gmailAutoSync===true || process.env.GMAIL_AUTO_SYNC==='true';if(!enabled)return;try{const result=await verifyAllConnectedGmails();if(result.confirmed)console.log('Gmail verification:',result);}catch(e){console.error('Gmail sync failed:',e.message);}}
+connectDatabase().then(async()=>{await ensureBootstrapAdmin();app.listen(port,()=>console.log(`OmniUPI API listening on port ${port}`));await expireSubscriptions().catch(e=>console.error('Initial expiry check failed:',e.message));setInterval(()=>expireSubscriptions().catch(e=>console.error('Subscription expiry check failed:',e.message)),Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS||60000));setInterval(gmailAutoSyncTick,Number(process.env.GMAIL_SYNC_INTERVAL_MS||60000));}).catch(e=>{console.error('Database connection failed:',e.message);process.exit(1)});
