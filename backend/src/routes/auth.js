@@ -68,11 +68,21 @@ router.post('/login', async (req, res, next) => {
       return res.status(401).json({ status: false, message: 'Invalid email or password' });
     }
     const token = signToken(user);
+    if (user.role === 'admin') {
+      return res.json({
+        status: true,
+        token,
+        trial: { active: false, endsAt: null },
+        subscription: { required: false, active: true, permanent: true },
+        user: { id: user._id, userId: user.userId || null, name: user.name, email: user.email, role: 'admin' }
+      });
+    }
     const trialActive = !!user.trialEndsAt && user.trialEndsAt.getTime() > Date.now() && !user.plan;
     res.json({
       status: true,
       token,
       trial: { active: trialActive, endsAt: user.trialEndsAt },
+      subscription: { required: true, active: !!user.plan && user.planStatus === 'ACTIVE', permanent: false },
       user: { id: user._id, userId: user.userId || null, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) { next(error); }
