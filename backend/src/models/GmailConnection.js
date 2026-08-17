@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 const gmailConnectionSchema = new mongoose.Schema({
-  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, unique: true, index: true },
+  merchant: { type: mongoose.Schema.Types.ObjectId, ref: 'Merchant', required: true, unique: true, index: true },
+  owner: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true, index: true },
   email: { type: String, required: true, trim: true, lowercase: true },
   refreshTokenEncrypted: { type: String, required: true, select: false },
   lastCheckedAt: { type: Date, default: null },
