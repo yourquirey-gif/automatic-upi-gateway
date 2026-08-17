@@ -31,7 +31,7 @@ router.post('/:merchantId/verify', async (req, res, next) => {
     if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Add the merchant UPI ID before verification.' });
     if (merchant.verificationStatus === 'verified') return res.json({ status: true, verified: true, merchant });
-    const client = createGoogleClient();
+    const client = await createGoogleClient('gmail');
     const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'merchant-gmail-verify' }, process.env.JWT_SECRET, { expiresIn: '10m' });
     const url = client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', state, scope: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'] });
     merchant.verificationStatus = 'verifying';
