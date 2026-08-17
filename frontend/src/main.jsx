@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import App from './App.jsx';
+import OAuthBridge from './OAuthBridge.jsx';
 import LegalPage from './LegalPages.jsx';
 import Transactions from './Transactions.jsx';
 import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CheckoutRoutesV2.jsx';
@@ -24,24 +25,24 @@ function Root() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const onHashChange = () => setHash(window.location.hash); window.addEventListener('hashchange', onHashChange); return () => window.removeEventListener('hashchange', onHashChange); }, []);
   const legal = {'#privacy':'privacy','#terms':'terms','#refund':'refund','#shipping':'shipping','#contact':'contact'};
-  if (legal[hash]) return <LegalPage type={legal[hash]} />;
-  if (window.location.pathname === '/auth') return <SubscriptionPage />;
-  if (hash === '#dashboard/account') return <AccountPage />;
-  if (hash === '#dashboard/password') return <PasswordPage />;
-  if (hash === '#dashboard/kyc') return <KycPage />;
-  if (hash === '#dashboard/api') return <ApiPage />;
-  if (hash === '#dashboard/apk') return <MerchantApkPage />;
-  if (hash === '#dashboard/video') return <KycGate><VideoMerchant /></KycGate>;
-  if (hash === '#dashboard/docs') return <KycGate><Documentation /></KycGate>;
-  if (hash === '#dashboard/support') return <SupportTicketPage />;
-  if (hash === '#dashboard/faq') return <FaqPage />;
-  if (hash === '#subscription' || hash === '#dashboard/subscription') return <KycGate><SubscriptionPage /></KycGate>;
-  if (hash === '#dashboard/transactions') return <KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate>;
-  if (hash === '#dashboard/checkout') return <KycGate><CheckoutPage /></KycGate>;
-  if (hash === '#dashboard/payment-link') return <KycGate><PaymentLinkPage /></KycGate>;
-  if (hash.startsWith('#pay?')) return <PublicPaymentPage route={hash} />;
-  if (hash === '#dashboard' || hash.startsWith('#dashboard/')) return <KycGate><App /></KycGate>;
-  return <App />;
+  if (legal[hash]) return <><OAuthBridge /><LegalPage type={legal[hash]} /></>;
+  if (window.location.pathname === '/auth') return <><OAuthBridge /><SubscriptionPage /></>;
+  if (hash === '#dashboard/account') return <><OAuthBridge /><AccountPage /></>;
+  if (hash === '#dashboard/password') return <><OAuthBridge /><PasswordPage /></>;
+  if (hash === '#dashboard/kyc') return <><OAuthBridge /><KycPage /></>;
+  if (hash === '#dashboard/api') return <><OAuthBridge /><ApiPage /></>;
+  if (hash === '#dashboard/apk') return <><OAuthBridge /><MerchantApkPage /></>;
+  if (hash === '#dashboard/video') return <><OAuthBridge /><KycGate><VideoMerchant /></KycGate></>;
+  if (hash === '#dashboard/docs') return <><OAuthBridge /><KycGate><Documentation /></KycGate></>;
+  if (hash === '#dashboard/support') return <><OAuthBridge /><SupportTicketPage /></>;
+  if (hash === '#dashboard/faq') return <><OAuthBridge /><FaqPage /></>;
+  if (hash === '#subscription' || hash === '#dashboard/subscription') return <><OAuthBridge /><KycGate><SubscriptionPage /></KycGate></>;
+  if (hash === '#dashboard/transactions') return <><OAuthBridge /><KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate></>;
+  if (hash === '#dashboard/checkout') return <><OAuthBridge /><KycGate><CheckoutPage /></KycGate></>;
+  if (hash === '#dashboard/payment-link') return <><OAuthBridge /><KycGate><PaymentLinkPage /></KycGate></>;
+  if (hash.startsWith('#pay?')) return <><OAuthBridge /><PublicPaymentPage route={hash} /></>;
+  if (hash === '#dashboard' || hash.startsWith('#dashboard/')) return <><OAuthBridge /><KycGate><App /></KycGate></>;
+  return <><OAuthBridge /><App /></>;
 }
 
 function KycGate({ children }) {
