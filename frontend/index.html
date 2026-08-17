@@ -19,13 +19,24 @@
         .hero-section:before{right:50%;top:auto;bottom:32px;width:min(78vw,570px);transform:translateX(50%) rotate(0deg)}
       }
       @media(max-width:760px){
-        /* Keep the decorative merchant card below the CTA + metrics instead of letting it overlap them. */
-        .hero-section{padding-bottom:540px}
-        .hero-section:before{bottom:26px;width:calc(100vw - 44px);max-width:570px}
+        .hero-section{display:flex!important;flex-direction:column!important;align-items:stretch!important;gap:0!important;min-height:0!important;padding:58px 18px 34px!important}
+        .hero-section:before{position:relative!important;right:auto!important;top:auto!important;bottom:auto!important;order:3!important;display:block!important;width:100%!important;max-width:390px!important;height:auto!important;aspect-ratio:800/495!important;margin:58px auto 18px!important;transform:none!important;flex:none!important;background-size:contain!important}
+        .hero-copy{width:100%!important;display:flex!important;flex-direction:column!important;align-items:stretch!important}
+        .hero-copy h1{font-size:clamp(42px,12vw,58px)!important;line-height:1.02!important;letter-spacing:-2.4px!important;margin:22px 0!important}
+        .hero-copy>p{font-size:18px!important;line-height:1.65!important}
+        .hero-actions{display:flex!important;flex-direction:column!important;gap:12px!important;margin-top:30px!important}
+        .gradient-btn,.light-btn{width:100%!important;min-height:58px!important;padding:15px 20px!important}
+        .metrics{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-top:34px!important;padding:0 2px!important;position:relative!important;z-index:4!important}
+        .metrics div{min-width:0!important;text-align:center!important}
+        .metrics strong{font-size:clamp(27px,8vw,36px)!important;line-height:1!important}
+        .metrics span{font-size:10px!important;letter-spacing:.08em!important;white-space:nowrap!important}
       }
       @media(max-width:430px){
-        .hero-section{padding-bottom:510px}
-        .hero-section:before{bottom:22px;width:calc(100vw - 30px)}
+        .hero-section{padding:48px 15px 28px!important}
+        .hero-section:before{width:100%!important;max-width:390px!important;margin-top:48px!important}
+        .metrics{gap:4px!important}
+        .metrics strong{font-size:28px!important}
+        .metrics span{font-size:9px!important}
       }
     </style>
   </head>
@@ -58,6 +69,6 @@
       new MutationObserver(addLegalLinks).observe(document.getElementById('root'),{childList:true,subtree:true});
       addLegalLinks();
     </script>
-    <script type="module" src="/src/main.jsx?v=20260817-7"></script>
+    <script type="module" src="/src/main.jsx?v=20260817-8"></script>
   </body>
 </html>
