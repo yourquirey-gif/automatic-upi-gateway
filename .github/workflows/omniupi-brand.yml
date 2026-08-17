@@ -1,43 +1,74 @@
-name: Apply OmniUPI branding
+name: Apply OmniUPI branding everywhere
 
 on:
   push:
     branches: ["main"]
     paths:
-      - "frontend/src/App.jsx"
-      - "frontend/index.html"
       - ".github/workflows/omniupi-brand.yml"
+      - "**"
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   brand:
+    if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
-      - name: Replace legacy frontend branding
+      - name: Replace legacy branding and endpoints everywhere
         run: |
           python - <<'PY'
           from pathlib import Path
-          for name in ["frontend/src/App.jsx", "frontend/index.html"]:
-              p = Path(name)
-              if p.exists():
-                  s = p.read_text(encoding="utf-8")
-                  s = s.replace("AutoGateway", "OmniUPI")
-                  p.write_text(s, encoding="utf-8")
+
+          replacements = [
+              ("https://automatic-upi-gateway.onrender.com", "https://api.omniupi.in"),
+              ("http://automatic-upi-gateway.onrender.com", "https://api.omniupi.in"),
+              ("https://seox.mooo.com", "https://api.omniupi.in"),
+              ("http://seox.mooo.com", "https://api.omniupi.in"),
+              ("https://yourquirey-gif.github.io/automatic-upi-gateway", "https://omniupi.in"),
+              ("http://yourquirey-gif.github.io/automatic-upi-gateway", "https://omniupi.in"),
+              ("AutoGateway", "OmniUPI"),
+              ("AUTOGATEWAY", "OMNIUPI"),
+              ("autogateway_token", "omniupi_token"),
+              ("autogateway_user", "omniupi_user"),
+              ("autogateway_trial", "omniupi_trial"),
+              ("autogateway", "omniupi"),
+          ]
+
+          skip_dirs = {".git", "node_modules", "dist", "build"}
+          changed = []
+          for p in Path('.').rglob('*'):
+              if not p.is_file() or any(part in skip_dirs for part in p.parts):
+                  continue
+              if p.suffix.lower() in {'.png','.jpg','.jpeg','.gif','.webp','.ico','.mp4','.mov','.avi','.mkv','.zip','.pdf','.woff','.woff2','.ttf','.otf'}:
+                  continue
+              try:
+                  s = p.read_text(encoding='utf-8')
+              except (UnicodeDecodeError, OSError):
+                  continue
+              original = s
+              for old, new in replacements:
+                  s = s.replace(old, new)
+              if s != original:
+                  p.write_text(s, encoding='utf-8')
+                  changed.append(str(p))
+
+          print('Updated files:')
+          for name in changed:
+              print(name)
           PY
 
-      - name: Commit branding changes
+      - name: Commit OmniUPI cleanup
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          if git diff --quiet; then
-            echo "No legacy branding found."
-            exit 0
-          fi
-          git add frontend/src/App.jsx frontend/index.html
-          git commit -m "Rebrand landing page to OmniUPI"
+          git add -A
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: replace legacy AutoGateway branding and endpoints"
           git push
