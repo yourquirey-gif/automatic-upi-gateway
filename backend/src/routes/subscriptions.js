@@ -23,6 +23,10 @@ function buildDynamicUpiUrl({ upiId, payeeName, amount, orderId, planName }) {
 
 router.post('/purchase', requireAuth, requireKycIfEnabled, async (req, res, next) => {
   try {
+    // Administrators are platform owners, not merchants. They never need a plan.
+    if (req.auth?.role === 'admin') {
+      return res.status(403).json({ status: false, message: 'Administrators have permanent free access and do not need a subscription.' });
+    }
     const plan = await Plan.findOne({ _id: req.body.planId, active: true });
     if (!plan) return res.status(404).json({ status: false, message: 'Plan not found or inactive' });
     const settings = await GatewaySettings.findOne({ key: 'global' });
@@ -46,6 +50,10 @@ router.get('/order/:orderId', requireAuth, async (req, res, next) => {
 
 router.get('/me', requireAuth, async (req, res, next) => {
   try {
+    // Permanent admin entitlement: no plan, no expiry, no subscription purchase required.
+    if (req.auth?.role === 'admin') {
+      return res.json({ status: true, role: 'admin', isAdmin: true, plan: null, active: true, expired: false, permanent: true, startedAt: null, expiresAt: null });
+    }
     const user = await User.findById(req.auth.sub).populate('plan');
     const now = new Date();
     if (user?.plan && user.planExpiresAt && user.planExpiresAt <= now) {
@@ -53,7 +61,7 @@ router.get('/me', requireAuth, async (req, res, next) => {
       user.plan = null; user.planStatus = 'EXPIRED'; await user.save();
     }
     const refreshed = await User.findById(req.auth.sub).populate('plan');
-    res.json({ status: true, plan: refreshed?.plan || null, active: !!refreshed?.plan && refreshed.planStatus === 'ACTIVE' && refreshed.planExpiresAt > now, expired: refreshed?.planStatus === 'EXPIRED', startedAt: refreshed?.planStartedAt || null, expiresAt: refreshed?.planExpiresAt || null });
+    res.json({ status: true, role: 'merchant', isAdmin: false, plan: refreshed?.plan || null, active: !!refreshed?.plan && refreshed.planStatus === 'ACTIVE' && refreshed.planExpiresAt > now, expired: refreshed?.planStatus === 'EXPIRED', permanent: false, startedAt: refreshed?.planStartedAt || null, expiresAt: refreshed?.planExpiresAt || null });
   } catch (error) { next(error); }
 });
 
