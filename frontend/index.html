@@ -20,6 +20,22 @@
   </head>
   <body>
     <div id="root"></div>
-    <script type="module" src="/src/main.jsx?v=20260817-4"></script>
+    <script>
+      document.addEventListener('click', async function(e){
+        const button=e.target.closest && e.target.closest('.google-btn');
+        if(!button) return;
+        e.preventDefault(); e.stopImmediatePropagation();
+        const base=(window.__OMNIUPI_API_BASE__||'https://api.omniupi.in/api/v1').replace(/\/$/,'');
+        try{
+          const r=await fetch(base+'/auth/google/config',{cache:'no-store'}); const d=await r.json();
+          if(!r.ok||!d.enabled) throw new Error('Google sign-up is currently disabled by the administrator.');
+          location.href=base+'/auth/google';
+        }catch(err){
+          const box=document.querySelector('.auth-error');
+          if(box) box.textContent=err.message; else alert(err.message);
+        }
+      },true);
+    </script>
+    <script type="module" src="/src/main.jsx?v=20260817-5"></script>
   </body>
 </html>
