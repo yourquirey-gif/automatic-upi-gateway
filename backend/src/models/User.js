@@ -4,6 +4,8 @@ const userSchema = new mongoose.Schema({
   name: { type: String, trim: true, required: true },
   email: { type: String, trim: true, lowercase: true, unique: true, required: true },
   passwordHash: { type: String, required: true, select: false },
+  authProvider: { type: String, enum: ['password', 'google'], default: 'password' },
+  googleId: { type: String, default: '', index: true, sparse: true },
   role: { type: String, enum: ['merchant', 'admin'], default: 'merchant' },
   status: { type: String, enum: ['active', 'suspended'], default: 'active' },
   userId: { type: String, unique: true, sparse: true, index: true },
