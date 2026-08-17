@@ -1,8 +1,5 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
 
-// Admin data lives under /admin, while a few shared services intentionally
-// live at their own API root. Keeping this mapping here prevents the admin
-// console from silently failing its initial Promise.all load.
 function resolveAdminPath(path) {
   const p = String(path || '');
   if (p.startsWith('/auth/')) return p;
@@ -14,17 +11,34 @@ function resolveAdminPath(path) {
 
 export async function adminApi(path, options = {}) {
   const token = localStorage.getItem('gateway_admin_token');
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  const headers = { Accept: 'application/json', 'Content-Type': 'application/json', ...(options.headers || {}) };
   if (token) headers.Authorization = `Bearer ${token}`;
+
   const endpoint = resolveAdminPath(path);
-  const response = await fetch(`${API_BASE}${endpoint}`, { ...options, headers, cache: 'no-store' });
+  const url = `${API_BASE}${endpoint}`;
+  let response;
+  try {
+    response = await fetch(url, { ...options, headers, cache: 'no-store' });
+  } catch {
+    throw new Error(`Admin API unreachable: ${url}`);
+  }
+
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || `Request failed (${response.status})`);
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(data.message || 'Administrator authentication required');
+    }
+    throw new Error(data.message || `Request failed (${response.status})`);
+  }
   return data;
 }
 
 export async function adminLogin(email, password) {
-  const data = await adminApi('/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+  // Login is intentionally performed against the normal auth endpoint.
+  const data = await adminApi('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password })
+  });
   if (data.user?.role !== 'admin') throw new Error('Administrator access required');
   localStorage.setItem('gateway_admin_token', data.token);
   return data;
