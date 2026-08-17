@@ -1,48 +1,17 @@
-name: Apply OmniUPI Landing Branding
+name: OmniUPI branding compatibility
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "index.html"
-      - ".github/workflows/brand-omniupi.yml"
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  brand:
-    if: github.actor != 'github-actions[bot]'
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Replace legacy landing branding
+      - name: Confirm canonical branding
         run: |
-          python - <<'PY'
-          from pathlib import Path
-          p = Path('index.html')
-          s = p.read_text(encoding='utf-8')
-          replacements = [
-              ('AutoGateway', 'OmniUPI'),
-              ('AUTOGATEWAY', 'OMNIUPI'),
-              ('autogateway', 'omniupi'),
-              ('automatic-upi-gateway.onrender.com', 'api.omniupi.in'),
-          ]
-          for old, new in replacements:
-              s = s.replace(old, new)
-          s = s.replace('https://api.omniupi.in/api/v1', 'https://api.omniupi.in/api/v1')
-          p.write_text(s, encoding='utf-8')
-          PY
-
-      - name: Commit branded landing page
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add index.html
-          git diff --cached --quiet && exit 0
-          git commit -m "fix: apply OmniUPI branding to landing page"
-          git push
+          grep -R "OmniUPI" index.html >/dev/null
+          echo "OmniUPI branding is active."
