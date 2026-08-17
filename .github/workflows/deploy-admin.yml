@@ -1,4 +1,4 @@
-name: Deploy Admin Panel to GitHub Pages
+name: Deploy OmniUPI Admin Panel to GitHub Pages
 
 on:
   push:
@@ -31,13 +31,15 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: npm
+          cache-dependency-path: admin/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
-      - name: Build admin panel
+      - name: Build OmniUPI admin panel
         env:
-          VITE_API_BASE_URL: https://automatic-upi-gateway.onrender.com/api/v1
+          VITE_API_BASE_URL: https://api.omniupi.in/api/v1
         run: npm run build
 
       - name: Configure Pages
