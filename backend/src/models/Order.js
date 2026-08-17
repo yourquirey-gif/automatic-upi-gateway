@@ -18,7 +18,10 @@ const orderSchema = new mongoose.Schema({
   netAmount: { type: Number, default: 0, min: 0 },
   feeSettlementStatus: { type: String, enum: ['NOT_APPLICABLE', 'PENDING', 'SETTLED', 'MANUAL'], default: 'NOT_APPLICABLE' },
   verificationSource: { type: String, enum: ['gmail', 'provider_webhook', 'manual'], default: 'manual' },
-  verificationMessageId: { type: String, trim: true }
+  verificationMessageId: { type: String, trim: true },
+  paymentReceipt: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentReceipt', default: null }
 }, { timestamps: true });
+
+orderSchema.index({ merchant: 1, utr: 1 }, { unique: true, sparse: true });
 
 export default mongoose.model('Order', orderSchema);
