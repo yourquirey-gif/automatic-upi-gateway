@@ -28,8 +28,8 @@ app.use(cors({ origin: true, credentials: true }));
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'automatic-upi-gateway-api' }));
-app.get('/api/v1', (_req, res) => res.json({ name: 'Automatic UPI Gateway API', version: 'v1' }));
+app.get('/health', (_req, res) => res.json({ ok: true, service: 'omniupi-api', brand: 'OmniUPI', website: 'https://omniupi.in', api: 'https://api.omniupi.in' }));
+app.get('/api/v1', (_req, res) => res.json({ name: 'OmniUPI API', brand: 'OmniUPI', version: 'v1', website: 'https://omniupi.in', docs: 'https://omniupi.in/docs' }));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/merchants', merchantRoutes);
 app.use('/api/v1/admin', adminRoutes);
@@ -51,7 +51,7 @@ app.use((err, _req, res, _next) => {
 // Creates the first administrator from hosting-provider environment variables.
 // If the email already exists as a merchant, it is promoted only when the supplied
 // ADMIN_PASSWORD matches that existing account password. No production password is
-// stored in the repository.
+// stored in the repository. Admin accounts are permanent and subscription-free.
 async function ensureBootstrapAdmin() {
   const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase();
   const password = String(process.env.ADMIN_PASSWORD || '');
@@ -123,7 +123,7 @@ async function expireSubscriptions() {
 connectDatabase()
   .then(async () => {
     await ensureBootstrapAdmin();
-    app.listen(port, () => console.log(`API listening on port ${port}`));
+    app.listen(port, () => console.log(`OmniUPI API listening on port ${port}`));
     await expireSubscriptions().catch((error) => console.error('Initial expiry check failed:', error.message));
     setInterval(() => expireSubscriptions().catch((error) => console.error('Subscription expiry check failed:', error.message)), Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
     if (process.env.GMAIL_AUTO_SYNC === 'true') {
