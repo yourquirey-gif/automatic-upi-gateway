@@ -1,4 +1,4 @@
-const API_BASE = String(import.meta.env.VITE_API_BASE_URL || '/api/v1').replace(/\/$/, '');
+const API_BASE = String(import.meta.env.VITE_API_BASE_URL || 'https://api.omniupi.in/api/v1').replace(/\/$/, '');
 
 function resolveAdminPath(path) {
   const p = String(path || '');
@@ -34,7 +34,6 @@ export async function adminApi(path, options = {}) {
 }
 
 export async function adminLogin(email, password) {
-  // Login is intentionally performed against the normal auth endpoint.
   const data = await adminApi('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ email, password })
