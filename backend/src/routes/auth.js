@@ -18,70 +18,36 @@ function publicWeb(){return String(process.env.PUBLIC_WEB_BASE_URL||'https://omn
 function normalizeUpi(value){return String(value||'').trim().toLowerCase();}
 
 router.get('/google/config',async(_req,res,next)=>{try{res.json({status:true,enabled:await googleEnabled()});}catch(e){next(e)}});
-
-// Normal merchant/user Google login + signup.
-router.get('/google',async(req,res,next)=>{try{
-  if(!await googleEnabled())return res.status(404).send('Google sign-up is currently disabled.');
-  const client=await createGoogleClient('auth');
-  const mode=['login','signup'].includes(String(req.query.mode))?String(req.query.mode):'login';
-  const state=jwt.sign({purpose:'google-auth',mode},process.env.JWT_SECRET,{expiresIn:'10m'});
-  res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'select_account',state,scope:['openid','email','profile']}));
-}catch(e){next(e)}});
-
-// Merchant onboarding: UPI ID + registered mobile are bound into a short-lived signed state.
-router.get('/google/merchant',async(req,res,next)=>{try{
-  if(!await googleEnabled())return res.status(404).send('Google OAuth is currently disabled.');
-  const upi=normalizeUpi(req.query.upi),mobile=String(req.query.mobile||'').replace(/\D/g,'');
-  if(!upi||!mobile||mobile.length!==10)return res.status(400).send('Valid UPI ID and 10-digit mobile number are required.');
-  const client=await createGoogleClient('gmail');
-  const state=jwt.sign({purpose:'merchant-google-onboarding',upi,mobile},process.env.JWT_SECRET,{expiresIn:'10m'});
-  res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'consent',state,scope:['openid','email','profile','https://www.googleapis.com/auth/gmail.readonly']}));
-}catch(e){next(e)}});
+router.get('/google',async(req,res,next)=>{try{if(!await googleEnabled())return res.status(404).send('Google sign-up is currently disabled.');const client=await createGoogleClient('auth');const mode=['login','signup'].includes(String(req.query.mode))?String(req.query.mode):'login';const state=jwt.sign({purpose:'google-auth',mode},process.env.JWT_SECRET,{expiresIn:'10m'});res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'select_account',state,scope:['openid','email','profile']}));}catch(e){next(e)}});
+router.get('/google/merchant',async(req,res,next)=>{try{if(!await googleEnabled())return res.status(404).send('Google OAuth is currently disabled.');const upi=normalizeUpi(req.query.upi),mobile=String(req.query.mobile||'').replace(/\D/g,'');if(!upi||!mobile||mobile.length!==10)return res.status(400).send('Valid UPI ID and 10-digit mobile number are required.');const client=await createGoogleClient('auth');const state=jwt.sign({purpose:'merchant-google-onboarding',upi,mobile},process.env.JWT_SECRET,{expiresIn:'10m'});res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'consent',state,scope:['openid','email','profile','https://www.googleapis.com/auth/gmail.readonly']}));}catch(e){next(e)}});
 
 router.get('/google/callback',async(req,res,next)=>{try{
   const payload=jwt.verify(String(req.query.state||''),process.env.JWT_SECRET);
   if(!['google-auth','merchant-google-onboarding'].includes(payload.purpose))return res.status(400).send('Invalid OAuth state');
-  const client=await createGoogleClient(payload.purpose==='google-auth'?'auth':'gmail');
+  const client=await createGoogleClient('auth');
   const {tokens}=await client.getToken(String(req.query.code||''));
   if(!tokens.access_token)return res.status(400).send('Google authorization did not return an access token.');
   client.setCredentials(tokens);
-  const oauth2=google.oauth2({version:'v2',auth:client});
-  const profile=await oauth2.userinfo.get();
-  const email=String(profile.data.email||'').trim().toLowerCase();
-  const googleId=String(profile.data.id||'').trim();
-  const name=String(profile.data.name||email.split('@')[0]||'Merchant').trim();
+  const oauth2=google.oauth2({version:'v2',auth:client});const profile=await oauth2.userinfo.get();
+  const email=String(profile.data.email||'').trim().toLowerCase(),googleId=String(profile.data.id||'').trim(),name=String(profile.data.name||email.split('@')[0]||'Merchant').trim();
   if(!email||!googleId||profile.data.verified_email===false)return res.status(400).send('Google account did not provide a verified email.');
 
   if(payload.purpose==='google-auth'){
-    let user=await User.findOne({$or:[{email},{googleId}]}).select('+passwordHash');
-    if(user?.role==='admin')return res.status(403).send('Administrator accounts must use administrator login.');
-    if(user){
-      if(user.status!=='active')return res.status(403).send('This account is suspended.');
-      user.googleId=googleId;user.authProvider='google';await user.save({validateBeforeSave:false});
-    }else{
-      const {started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials(),passwordHash=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);
-      user=await User.create({name,email,passwordHash,authProvider:'google',googleId,userId,apiToken,instanceSecret,webhookUrl:'',trialStartedAt:started,trialEndsAt:ends});
-    }
-    const token=signToken(user);
-    return res.redirect(`${publicWeb()}/#google_token=${encodeURIComponent(token)}`);
+    let user=await User.findOne({$or:[{email},{googleId}]}).select('+passwordHash');if(user?.role==='admin')return res.status(403).send('Administrator accounts must use administrator login.');
+    if(user){if(user.status!=='active')return res.status(403).send('This account is suspended.');user.googleId=googleId;user.authProvider='google';await user.save({validateBeforeSave:false});}
+    else{const {started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials(),passwordHash=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);user=await User.create({name,email,passwordHash,authProvider:'google',googleId,userId,apiToken,instanceSecret,webhookUrl:'',trialStartedAt:started,trialEndsAt:ends});}
+    return res.redirect(`${publicWeb()}/#google_token=${encodeURIComponent(signToken(user))}`);
   }
 
-  let user=await User.findOne({$or:[{email},{googleId}]}).select('+passwordHash');
-  if(user?.role==='admin')return res.status(403).send('Administrator accounts must use administrator login.');
+  let user=await User.findOne({$or:[{email},{googleId}]}).select('+passwordHash');if(user?.role==='admin')return res.status(403).send('Administrator accounts must use administrator login.');
   if(user){if(user.status!=='active')return res.status(403).send('This account is suspended.');user.googleId=googleId;user.authProvider='google';await user.save({validateBeforeSave:false});}
-  else{
-    const {started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials(),passwordHash=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);
-    user=await User.create({name,email,passwordHash,authProvider:'google',googleId,userId,apiToken,instanceSecret,webhookUrl:'',trialStartedAt:started,trialEndsAt:ends});
-  }
-
+  else{const {started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials(),passwordHash=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);user=await User.create({name,email,passwordHash,authProvider:'google',googleId,userId,apiToken,instanceSecret,webhookUrl:'',trialStartedAt:started,trialEndsAt:ends});}
   let merchant=await Merchant.findOne({owner:user._id,upiId:payload.upi});
-  if(!merchant){
-    merchant=await Merchant.create({owner:user._id,name:name||email.split('@')[0],provider:'upi_gmail',upiId:payload.upi,mobile:payload.mobile,status:'pending',verificationStatus:'verifying',verificationMessage:'Gmail authorization received. Checking the linked payment account email.'});
-  }else{merchant.mobile=payload.mobile;merchant.verificationStatus='verifying';merchant.verificationMessage='Gmail authorization received. Checking the linked payment account email.';await merchant.save();}
-
-  const result=await verifyMerchantGmail({merchant,client,email,refreshToken:tokens.refresh_token||''});
-  const token=signToken(user);
-  return res.redirect(`${publicWeb()}/#google_token=${encodeURIComponent(token)}&merchant_id=${encodeURIComponent(merchant._id)}&merchant_verified=${result.verified?'1':'0'}`);
+  if(!merchant)merchant=await Merchant.create({owner:user._id,name:name||email.split('@')[0],provider:'upi_gmail',upiId:payload.upi,mobile:payload.mobile,status:'pending',verificationStatus:'verifying',verificationMessage:'Gmail authorization received. Checking the linked payment account email.'});
+  else{merchant.mobile=payload.mobile;merchant.verificationStatus='verifying';merchant.verificationMessage='Gmail authorization received. Checking the linked payment account email.';await merchant.save();}
+  if(!tokens.refresh_token)return res.status(400).send('Google did not return a Gmail refresh token. Reconnect and grant consent again.');
+  const result=await verifyMerchantGmail({merchant,client,email,refreshToken:tokens.refresh_token});
+  return res.redirect(`${publicWeb()}/#google_token=${encodeURIComponent(signToken(user))}&merchant_id=${encodeURIComponent(merchant._id)}&merchant_verified=${result.verified?'1':'0'}`);
 }catch(e){next(e)}});
 
 router.post('/register',async(req,res,next)=>{try{const {name,email,password}=req.body;if(!name||!email||!password||password.length<8)return res.status(400).json({status:false,message:'Name, valid email and password of at least 8 characters are required'});const normalizedEmail=email.trim().toLowerCase();if(await User.findOne({email:normalizedEmail}))return res.status(409).json({status:false,message:'Email is already registered'});const passwordHash=await bcrypt.hash(password,12),{started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials();const user=await User.create({userId,name:name.trim(),email:normalizedEmail,passwordHash,authProvider:'password',apiToken,instanceSecret,webhookUrl:'',trialStartedAt:started,trialEndsAt:ends});res.status(201).json({status:true,token:signToken(user),trial:{active:true,startedAt:started,endsAt:ends,durationDays:2},user:{id:user._id,userId:user.userId,name:user.name,email:user.email,role:user.role}});}catch(e){next(e)}});
