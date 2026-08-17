@@ -70,7 +70,7 @@ export default function SubscriptionPage() {
 
   return (
     <div className="subscription-page">
-      <header className="subscription-header"><div className="subscription-brand"><span>ϟ</span><b>AutoGateway</b></div><a href="/" className="subscription-home">Home</a></header>
+      <header className="subscription-header"><div className="subscription-brand"><span>ϟ</span><b>OmniUPI</b></div><a href="/" className="subscription-home">Home</a></header>
       <main className="subscription-main">
         <div className="subscription-heading"><span className="subscription-eyebrow">SUBSCRIPTION</span><h1>Choose Your Plan</h1><p>Flexible plans for your business growth</p></div>
         {error && <div className="subscription-error">{error}</div>}

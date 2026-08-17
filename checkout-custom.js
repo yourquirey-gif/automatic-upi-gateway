@@ -1,6 +1,6 @@
 (()=>{
-const API='https://automatic-upi-gateway.onrender.com';
-const token=localStorage.getItem('autogateway_token');
+const API='https://api.omniupi.in';
+const token=localStorage.getItem('omniupi_token');
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=async(path,opts={})=>{const r=await fetch(API+path,{...opts,headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json',...(opts.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok||d.status===false)throw new Error(d.message||'Request failed');return d};
 const app=()=>document.getElementById('app');

@@ -48,7 +48,7 @@ export default function Transactions({ onBack }) {
   return <div className="transactions-page">
     <header className="tx-topbar">
       <button className="tx-menu" onClick={onBack} aria-label="Back"><span></span><span></span><span></span></button>
-      <div className="tx-logo"><span>ϟ</span> AutoGateway</div>
+      <div className="tx-logo"><span>ϟ</span> OmniUPI</div>
       <div className="tx-top-actions"><div className="tx-trial"><CalendarDays size={15}/> 2026-08-17 - ACTIVE</div><div className="tx-avatar">M</div></div>
     </header>
 

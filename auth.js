@@ -1,4 +1,4 @@
-const API_BASE_URL=(window.API_BASE_URL||'https://automatic-upi-gateway.onrender.com').replace(/\/$/,'');
+const API_BASE_URL=(window.API_BASE_URL||'https://api.omniupi.in').replace(/\/$/,'');
 const AUTH_BASE_URL=window.AUTH_BASE_URL||API_BASE_URL;
 function apiUrl(path){return `${API_BASE_URL}${path.startsWith('/')?path:`/${path}`}`}
 function authUrl(mode){return `${AUTH_BASE_URL}/auth/google?mode=${encodeURIComponent(mode)}&return_to=${encodeURIComponent(location.href)}`}
@@ -29,9 +29,9 @@ async function submitEmailAuth(event,mode){
     const response=await fetch(apiUrl(`/api/v1/auth/${mode==='login'?'login':'register'}`),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(mode==='login'?{email,password}:{name,email,password})});
     let data={};try{data=await response.json()}catch{}
     if(!response.ok||!data.status)throw new Error(data.message||`Authentication failed (${response.status})`);
-    localStorage.setItem('autogateway_token',data.token||'');
-    localStorage.setItem('autogateway_user',JSON.stringify(data.user||{}));
-    if(data.trial)localStorage.setItem('autogateway_trial',JSON.stringify(data.trial));
+    localStorage.setItem('omniupi_token',data.token||'');
+    localStorage.setItem('omniupi_user',JSON.stringify(data.user||{}));
+    if(data.trial)localStorage.setItem('omniupi_trial',JSON.stringify(data.trial));
     continueToPanel();
   }catch(error){showAuthError(error.message||'Unable to connect to the backend. Please try again.');}
   finally{if(button){button.disabled=false;button.textContent=mode==='login'?'Login':'Create account'}}

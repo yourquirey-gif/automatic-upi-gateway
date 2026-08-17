@@ -8,7 +8,7 @@ const schema = new mongoose.Schema({
   panField: { type: Boolean, default: true },
   aadhaarField: { type: Boolean, default: true },
   paymentUpiId: { type: String, default: '' },
-  paymentName: { type: String, default: 'AutoGateway' }
+  paymentName: { type: String, default: 'OmniUPI' }
 }, { timestamps: true });
 
 export default mongoose.model('KycConfig', schema);

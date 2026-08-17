@@ -1,6 +1,6 @@
 (()=>{
   const CANONICAL='https://api.omniupi.in';
-  const LEGACY='https://automatic-upi-gateway.onrender.com';
+  const LEGACY='https://api.omniupi.in';
   const originalFetch=window.fetch.bind(window);
   window.fetch=(input,init)=>{
     try{

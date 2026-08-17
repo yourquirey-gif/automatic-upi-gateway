@@ -46,7 +46,7 @@ function Login({onLogin}){
   async function submit(e){e.preventDefault();setBusy(true);setError('');try{const d=await adminLogin(email,password);onLogin(d.token)}catch(e){setError(e.message)}finally{setBusy(false)}}
   return <div style={css.login}><form style={css.loginCard} onSubmit={submit}>
     <div style={{width:52,height:52,borderRadius:16,background:'#111827',color:'#fff',display:'grid',placeItems:'center',fontSize:28,fontWeight:900}}>ϟ</div>
-    <h1 style={{margin:'18px 0 6px'}}>AutoGateway Admin</h1><p style={{color:'#64748b',marginTop:0}}>Permanent administrator access · No subscription required</p>
+    <h1 style={{margin:'18px 0 6px'}}>OmniUPI Admin</h1><p style={{color:'#64748b',marginTop:0}}>Permanent administrator access · No subscription required</p>
     <label>Email<input style={css.input} type="email" value={email} onChange={e=>setEmail(e.target.value)} required/></label>
     <label style={{display:'block',marginTop:14}}>Password<input style={css.input} type="password" value={password} onChange={e=>setPassword(e.target.value)} required/></label>
     {error&&<div style={{marginTop:14,padding:12,borderRadius:10,background:'#fef2f2',color:'#b91c1c',fontSize:13}}>{error}</div>}
@@ -80,7 +80,7 @@ function AdminConsole({onLogout}){
 
   return <div style={css.page}><div style={css.layout}>
     <aside style={css.side}>
-      <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 4px 22px'}}><div style={{fontSize:28,fontWeight:900,color:'#fff'}}>ϟ</div><div><b style={{color:'#fff',display:'block'}}>AutoGateway</b><small style={{color:'#94a3b8'}}>ADMIN PANEL</small></div></div>
+      <div style={{display:'flex',alignItems:'center',gap:10,padding:'8px 4px 22px'}}><div style={{fontSize:28,fontWeight:900,color:'#fff'}}>ϟ</div><div><b style={{color:'#fff',display:'block'}}>OmniUPI</b><small style={{color:'#94a3b8'}}>ADMIN PANEL</small></div></div>
       <nav style={{display:'grid',gap:5}}>{tabs.map(([id,label,Icon])=><button key={id} onClick={()=>setTab(id)} style={{...css.button,width:'100%',justifyContent:'flex-start',background:tab===id?'#fff':'transparent',color:tab===id?'#111827':'#cbd5e1'}}><Icon size={17}/>{label}</button>)}</nav>
       <div style={{position:'absolute',bottom:18,left:18,right:18}}><button onClick={onLogout} style={{...css.button,width:'100%',justifyContent:'center',background:'#1e293b',color:'#e2e8f0'}}><LogOut size={16}/> Logout</button></div>
     </aside>

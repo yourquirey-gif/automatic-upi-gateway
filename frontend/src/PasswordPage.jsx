@@ -55,7 +55,7 @@ export default function PasswordPage() {
     <div className="password-page">
       <header className="password-topbar">
         <button className="password-menu" onClick={() => { window.location.hash = 'dashboard'; }} aria-label="Back to dashboard"><ArrowLeft size={22}/></button>
-        <div className="password-brand"><span>ϟ</span> AutoGateway</div>
+        <div className="password-brand"><span>ϟ</span> OmniUPI</div>
         <div className="password-spacer" />
         <div className="password-security"><LockKeyhole size={16}/> Secure</div>
       </header>

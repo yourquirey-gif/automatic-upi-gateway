@@ -9,7 +9,7 @@
   window.testDocHealth=async function(){const el=document.getElementById('doc-health');el.textContent='Checking…';try{const r=await fetch(API_DOC_BASE+'/api/health',{cache:'no-store'});const d=await r.json();el.innerHTML=`${pill('ONLINE','ok')} <span>${escDoc(d.service||'OmniUPI Public API')} · v${escDoc(d.version||'2.1')}</span>`;}catch(e){el.innerHTML=`${pill('OFFLINE','bad')} <span>Could not reach ${escDoc(API_DOC_BASE)}</span>`;}};
   window.testDocCreate=async function(){
     const amount=Number(document.getElementById('doc-amount').value), mobile=document.getElementById('doc-mobile').value.trim(), remark=document.getElementById('doc-remark').value.trim(), out=document.getElementById('doc-test-output');
-    const token=localStorage.getItem('autogateway_token');
+    const token=localStorage.getItem('omniupi_token');
     if(!token){out.innerHTML='<div class="doc-alert bad">Login first. Your merchant API token is required.</div>';return;}
     if(!Number.isFinite(amount)||amount<=0){out.innerHTML='<div class="doc-alert bad">Enter a valid amount.</div>';return;}
     out.innerHTML='<div class="doc-alert">Creating a test order…</div>';
@@ -17,7 +17,7 @@
   };
 
   window.docsPage=async function(){
-    const token=localStorage.getItem('autogateway_token')||'YOUR_API_TOKEN';
+    const token=localStorage.getItem('omniupi_token')||'YOUR_API_TOKEN';
     const base=API_DOC_BASE;
     const curlCreate=`curl -X POST '${base}/api/create-order' \\\n  -H 'Authorization: Bearer ${token}' \\\n  -H 'Content-Type: application/json' \\\n  -d '{"amount":499,"customer_mobile":"9876543210","remark1":"Order 1001"}'`;
     const php=`<?php\n$apiUrl = '${base}/api/create-order';\n$payload = [\n  'amount' => 499,\n  'customer_mobile' => '9876543210',\n  'remark1' => 'Order 1001'\n];\n\n$ch = curl_init($apiUrl);\ncurl_setopt_array($ch, [\n  CURLOPT_RETURNTRANSFER => true,\n  CURLOPT_POST => true,\n  CURLOPT_HTTPHEADER => [\n    'Authorization: Bearer ${token}',\n    'Content-Type: application/json'\n  ],\n  CURLOPT_POSTFIELDS => json_encode($payload),\n  CURLOPT_TIMEOUT => 20\n]);\n$response = curl_exec($ch);\nif ($response === false) { throw new Exception(curl_error($ch)); }\ncurl_close($ch);\necho $response;\n?>`;

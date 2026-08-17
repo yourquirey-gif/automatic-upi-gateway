@@ -8,7 +8,7 @@ const initialConfig = {
   panField: true,
   aadhaarField: true,
   paymentUpiId: '',
-  paymentName: 'AutoGateway'
+  paymentName: 'OmniUPI'
 };
 
 export default function KycAdmin() {

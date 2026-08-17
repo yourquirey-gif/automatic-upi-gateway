@@ -3,9 +3,9 @@ import { BookOpen, Copy, Link2, Search, ShieldCheck, Webhook, Zap } from 'lucide
 import './documentation.css';
 
 // The documentation frontend currently lives on GitHub Pages.
-export const DOCS_SITE_URL = 'https://yourquirey-gif.github.io/automatic-upi-gateway/';
+export const DOCS_SITE_URL = 'https://omniupi.in/';
 // API calls MUST point to the backend/API server, not the static GitHub Pages site.
-export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://seox.mooo.com';
+export const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://api.omniupi.in';
 
 const CREATE_ORDER_URL = `${API_BASE_URL}/api/create-order`;
 const STATUS_URL = `${API_BASE_URL}/api/check-order-status`;
@@ -94,7 +94,7 @@ export default function Documentation() {
   const filtered = createParams.filter(row => row.join(' ').toLowerCase().includes(query.trim().toLowerCase()));
 
   return <div className="documentation-page">
-    <header className="docs-topbar"><button className="docs-back" onClick={() => { location.hash = 'dashboard'; }}>ϟ AutoGateway</button><div className="docs-top-title">Documentation</div><div className="docs-version">v3.0</div></header>
+    <header className="docs-topbar"><button className="docs-back" onClick={() => { location.hash = 'dashboard'; }}>ϟ OmniUPI</button><div className="docs-top-title">Documentation</div><div className="docs-version">v3.0</div></header>
     <main className="docs-main">
       <div className="docs-hero"><div><span className="docs-eyebrow">DEVELOPER DOCUMENTATION</span><h1><BookOpen size={28}/> API Gateway Docs</h1><p>Create PayIN orders, open the payment page, check status and receive signed payment webhooks.</p></div><a href={DOCS_SITE_URL} target="_blank" rel="noreferrer" className="docs-site-link"><Link2 size={17}/> Docs Site</a></div>
 
@@ -111,7 +111,7 @@ export default function Documentation() {
     "txnStatus": "PENDING",
     "orderId": "ORDER123456",
     "amount": "1.00",
-    "payment_url": "https://seox.mooo.com/api/payment/ORDER123456",
+    "payment_url": "https://api.omniupi.in/api/payment/ORDER123456",
     "upi_url": "upi://pay?..."
   }
 }`}</ResponseBox></section>

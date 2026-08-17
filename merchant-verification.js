@@ -1,5 +1,5 @@
 (()=>{
-  const token=localStorage.getItem('autogateway_token');
+  const token=localStorage.getItem('omniupi_token');
   const API='https://api.omniupi.in';
   const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const req=async(path,opts={})=>{const r=await fetch(API+path,{...opts,headers:{Accept:'application/json','Content-Type':'application/json',Authorization:`Bearer ${token}`,...(opts.headers||{})}});const d=await r.json().catch(()=>({}));if(!r.ok||d.status===false)throw new Error(d.message||`Request failed (${r.status})`);return d};

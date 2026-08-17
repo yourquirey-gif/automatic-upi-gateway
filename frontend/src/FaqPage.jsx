@@ -3,8 +3,8 @@ import { ArrowLeft, ChevronDown, Code2, CreditCard, KeyRound, LifeBuoy, ShieldCh
 import './faq.css';
 
 const FAQS = [
-  { q:'What is AutoGateway?', a:'AutoGateway is a UPI payment gateway platform that provides merchants with API-based payment order creation, hosted payment checkout, transaction status verification and webhook-based payment notifications.' },
-  { q:'How does the payment flow work?', a:'Your application creates an order through the AutoGateway API. The API returns a payment URL. Your customer completes the payment on the hosted checkout, and your application can receive the resulting transaction status through the status API and configured webhook.' },
+  { q:'What is OmniUPI?', a:'OmniUPI is a UPI payment gateway platform that provides merchants with API-based payment order creation, hosted payment checkout, transaction status verification and webhook-based payment notifications.' },
+  { q:'How does the payment flow work?', a:'Your application creates an order through the OmniUPI API. The API returns a payment URL. Your customer completes the payment on the hosted checkout, and your application can receive the resulting transaction status through the status API and configured webhook.' },
   { q:'Where can I find my API credentials?', a:'After your merchant account is ready, open Developer Setting → API Details in the dashboard. Keep the API key private and use it only from your server-side integration.' },
   { q:'Can I use the API in my website, bot or panel?', a:'Yes. The API is designed for server-side integrations, so it can be connected to a website backend, Telegram bot backend, SaaS panel, custom application or other software that can make HTTPS POST requests.' },
   { q:'What information is required to create an order?', a:'The PayIN create-order API accepts customer_mobile, user_token, amount, order_id, redirect_url, remark1 and remark2. The exact parameter names and request format are available in the API Documentation.' },
@@ -24,14 +24,14 @@ const FAQS = [
 export default function FaqPage(){
   const [open,setOpen]=useState(0);
   const groups=[
-    {title:'About AutoGateway',icon:WalletCards,items:[0,1,14]},
+    {title:'About OmniUPI',icon:WalletCards,items:[0,1,14]},
     {title:'API & Integration',icon:Code2,items:[2,3,4,7,9,12]},
     {title:'Payments & Verification',icon:CreditCard,items:[5,6,8,11]},
     {title:'Account & Support',icon:ShieldCheck,items:[10,13,15]},
   ];
   return <div className="faq-page"><div className="faq-wrap">
-    <header className="faq-header"><button className="faq-back" onClick={()=>{window.location.hash='dashboard'}}><ArrowLeft size={18}/> Dashboard</button><div className="faq-brand"><span>ϟ</span> AutoGateway</div></header>
-    <section className="faq-hero"><div className="faq-badge"><LifeBuoy size={16}/> MERCHANT HELP CENTER</div><h1>Frequently Asked Questions</h1><p>AutoGateway, API integration, payment verification, webhooks, security and merchant support — all in one place.</p></section>
+    <header className="faq-header"><button className="faq-back" onClick={()=>{window.location.hash='dashboard'}}><ArrowLeft size={18}/> Dashboard</button><div className="faq-brand"><span>ϟ</span> OmniUPI</div></header>
+    <section className="faq-hero"><div className="faq-badge"><LifeBuoy size={16}/> MERCHANT HELP CENTER</div><h1>Frequently Asked Questions</h1><p>OmniUPI, API integration, payment verification, webhooks, security and merchant support — all in one place.</p></section>
     <div className="faq-note"><Webhook size={21}/><div><b>Integration tip</b><span>Keep your API key on the server and verify the webhook signature before marking an order as paid.</span></div></div>
     {groups.map(group=>{const Icon=group.icon;return <section className="faq-group" key={group.title}><div className="faq-group-title"><Icon size={20}/><h2>{group.title}</h2></div>{group.items.map(i=>{const item=FAQS[i],isOpen=open===i;return <article className={'faq-item '+(isOpen?'open':'')} key={i}><button onClick={()=>setOpen(isOpen?-1:i)}><span>{item.q}</span><ChevronDown size={20}/></button>{isOpen&&<div className="faq-answer">{item.a}</div>}</article>})}</section>})}
     <div className="faq-footer-card"><KeyRound size={25}/><div><h3>Need help with a specific order?</h3><p>Create a Support Ticket and include your order ID, API response/error and approximate payment time. Never share your API secret or password in the ticket.</p></div><button onClick={()=>{window.location.hash='dashboard/support'}}>Open Support</button></div>

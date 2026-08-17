@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import GatewaySettings from '../models/GatewaySettings.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
 const router=Router(); const isImg=v=>typeof v==='string'&&v.startsWith('data:image/');
-const upi=(id,name,amount,orderId)=>`upi://pay?${new URLSearchParams({pa:id,pn:name||'AutoGateway',am:Number(amount).toFixed(2),cu:'INR',tr:orderId,tn:`KYC ${orderId}`})}`;
+const upi=(id,name,amount,orderId)=>`upi://pay?${new URLSearchParams({pa:id,pn:name||'OmniUPI',am:Number(amount).toFixed(2),cu:'INR',tr:orderId,tn:`KYC ${orderId}`})}`;
 router.use(requireAuth);
 router.get('/settings',async(_q,res,next)=>{try{const s=await GatewaySettings.findOne({key:'global'});res.json({status:true,enabled:s?.kycEnabled!==false,required:s?.kycRequired===true,price:s?.kycPrice??50,accountFields:{pan:s?.accountPanEnabled===true,aadhaar:s?.accountAadhaarEnabled===true}})}catch(e){next(e)}});
 router.get('/me',async(req,res,next)=>{try{const user=await User.findById(req.auth.sub).select('kycStatus kycVerifiedAt account');const request=await KycRequest.findOne({user:req.auth.sub}).sort({createdAt:-1}).select('status paymentStatus amount rejectionReason createdAt paidAt verifiedAt paymentOrderId paymentUrl');res.json({status:true,user,request})}catch(e){next(e)}});

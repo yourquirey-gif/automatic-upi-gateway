@@ -1,10 +1,10 @@
 (() => {
   const replacements = [
-    ['AutoGateway', 'OmniUPI'],
-    ['AUTOGATEWAY', 'OMNIUPI'],
+    ['OmniUPI', 'OmniUPI'],
+    ['OMNIUPI', 'OMNIUPI'],
     ['automatic-upi-gateway.onrender.com', 'api.omniupi.in'],
     ['yourquirey-gif.github.io/automatic-upi-gateway', 'omniupi.in'],
-    ['https://yourquirey-gif.github.io/automatic-upi-gateway', 'https://omniupi.in'],
+    ['https://omniupi.in', 'https://omniupi.in'],
   ];
   const replace = (value) => replacements.reduce((v, [from, to]) => v.split(from).join(to), value);
   const fix = (root = document) => {

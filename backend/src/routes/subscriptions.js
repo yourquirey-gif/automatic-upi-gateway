@@ -17,7 +17,7 @@ router.get('/plans', async (_req, res, next) => {
 });
 
 function buildDynamicUpiUrl({ upiId, payeeName, amount, orderId, planName }) {
-  const params = new URLSearchParams({ pa: String(upiId).trim(), pn: String(payeeName || 'AutoGateway').trim(), am: Number(amount).toFixed(2), cu: 'INR', tr: orderId, tn: `Subscription ${planName} ${orderId}` });
+  const params = new URLSearchParams({ pa: String(upiId).trim(), pn: String(payeeName || 'OmniUPI').trim(), am: Number(amount).toFixed(2), cu: 'INR', tr: orderId, tn: `Subscription ${planName} ${orderId}` });
   return `upi://pay?${params.toString()}`;
 }
 

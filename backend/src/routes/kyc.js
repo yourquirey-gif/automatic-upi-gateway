@@ -12,7 +12,7 @@ router.use(requireAuth);
 function makeUpiUrl({ upiId, payeeName, amount, orderId }) {
   const params = new URLSearchParams({
     pa: String(upiId).trim(),
-    pn: String(payeeName || 'AutoGateway').trim(),
+    pn: String(payeeName || 'OmniUPI').trim(),
     am: Number(amount).toFixed(2),
     cu: 'INR',
     tr: orderId,
@@ -89,7 +89,7 @@ router.post('/start', async (req, res, next) => {
     const amount = Number(config.price ?? 50);
     const orderId = `AGK${Date.now()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const upiId = String(config.paymentUpiId || '').trim();
-    const upiName = config.paymentName || 'AutoGateway';
+    const upiName = config.paymentName || 'OmniUPI';
     if (!upiId) return res.status(503).json({ status: false, message: 'KYC payment UPI ID is not configured by administrator' });
 
     await KycOrder.updateMany({ user: req.auth.sub, status: 'PENDING_PAYMENT' }, { $set: { status: 'EXPIRED' } });
