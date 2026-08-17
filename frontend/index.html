@@ -45,6 +45,17 @@
           if(box) box.textContent=err.message; else alert(err.message);
         }
       },true);
+
+      const addLegalLinks=()=>{
+        const footer=document.querySelector('.footer');
+        if(!footer||footer.querySelector('.footer-legal-links')) return;
+        const wrap=document.createElement('div');
+        wrap.className='footer-legal-links';
+        wrap.innerHTML='<div class="footer-legal-title">Legal & Support</div><a href="#privacy">Privacy Policy</a><a href="#terms">Terms & Conditions</a><a href="#refund">Refund & Cancellation</a><a href="#shipping">Shipping & Delivery</a><a href="#contact">Contact Us</a>';
+        footer.insertBefore(wrap,footer.querySelector('.copyright'));
+      };
+      new MutationObserver(addLegalLinks).observe(document.getElementById('root'),{childList:true,subtree:true});
+      addLegalLinks();
     </script>
     <script type="module" src="/src/main.jsx?v=20260817-6"></script>
   </body>
