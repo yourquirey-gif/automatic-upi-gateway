@@ -2,9 +2,10 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <title>OmniUPI — UPI Payment Gateway for Businesses</title>
     <meta name="google-site-verification" content="kvaPLzY9gNX6RB-gZ9hxpqvJDXBm2W8BLA9GNRO4EXw" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="description" content="OmniUPI is a UPI payment gateway and payment infrastructure platform for modern businesses. Manage secure UPI payments, merchant tools, payment links and transaction analytics." />
+    <meta name="description" content="OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses. Merchants can connect UPI payment accounts, create payment links, accept customer payments and view transaction analytics." />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
     <meta name="author" content="OmniUPI" />
     <meta name="theme-color" content="#665cf1" />
@@ -15,12 +16,12 @@
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="OmniUPI" />
     <meta property="og:title" content="OmniUPI — UPI Payment Gateway for Businesses" />
-    <meta property="og:description" content="Modern UPI payment infrastructure for businesses with merchant tools, payment links and transaction analytics." />
+    <meta property="og:description" content="OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses with merchant tools, payment links and transaction analytics." />
     <meta property="og:url" content="https://omniupi.in/" />
     <meta property="og:image" content="https://omniupi.in/omniupi-logo.svg" />
     <meta name="twitter:card" content="summary" />
     <meta name="twitter:title" content="OmniUPI — UPI Payment Gateway for Businesses" />
-    <meta name="twitter:description" content="Modern UPI payment infrastructure for businesses." />
+    <meta name="twitter:description" content="OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses." />
     <meta name="twitter:image" content="https://omniupi.in/omniupi-logo.svg" />
     <script type="application/ld+json">
     {
@@ -31,7 +32,7 @@
           "@id":"https://omniupi.in/#website",
           "url":"https://omniupi.in/",
           "name":"OmniUPI",
-          "description":"UPI payment gateway and payment infrastructure for modern businesses.",
+          "description":"OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses. It provides merchant tools, payment links and transaction analytics.",
           "inLanguage":"en-IN"
         },
         {
@@ -59,6 +60,11 @@
       .hero-section{overflow:hidden}
       .hero-section:before{content:"";position:absolute;z-index:1;right:4%;top:50%;width:min(44vw,570px);aspect-ratio:800/495;transform:translateY(-43%) rotate(2deg);background:url('/hero-card.svg') center/contain no-repeat;pointer-events:none}
       .hero-copy{z-index:2}
+      .oauth-purpose{max-width:1180px;margin:0 auto 70px;padding:34px 38px;border:1px solid #e6e9f2;border-radius:24px;background:#fff;box-shadow:0 16px 40px #1720330b;color:#172033}
+      .oauth-purpose h2{margin:0 0 12px;font-size:28px;letter-spacing:-.7px}
+      .oauth-purpose p{margin:8px 0;color:#687386;font-size:16px;line-height:1.75}
+      .oauth-purpose strong{color:#303a4d}
+      .oauth-purpose a{color:#5d63dc;font-weight:750;text-decoration:none}
       @media(max-width:1050px){
         .hero-section{padding-bottom:500px}
         .hero-section:before{right:50%;top:auto;bottom:32px;width:min(78vw,570px);transform:translateX(50%) rotate(0deg)}
@@ -75,6 +81,9 @@
         .metrics div{min-width:0!important;text-align:center!important}
         .metrics strong{font-size:clamp(27px,8vw,36px)!important;line-height:1!important}
         .metrics span{font-size:10px!important;letter-spacing:.08em!important;white-space:nowrap!important}
+        .oauth-purpose{margin:0 18px 42px;padding:25px 22px;border-radius:20px}
+        .oauth-purpose h2{font-size:23px}
+        .oauth-purpose p{font-size:14px}
       }
       @media(max-width:430px){
         .hero-section{padding:48px 15px 28px!important}
@@ -87,6 +96,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <noscript>
+      <main style="max-width:900px;margin:40px auto;padding:24px;font-family:Arial,sans-serif">
+        <h1>OmniUPI</h1>
+        <p>OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses. It helps merchants connect UPI payment accounts, create payment links, accept customer payments and view transaction analytics.</p>
+        <p>OmniUPI uses Google Sign-In to authenticate merchant accounts. Users can review the <a href="#privacy">Privacy Policy</a> before signing in.</p>
+      </main>
+    </noscript>
     <script>
       document.addEventListener('click', async function(e){
         const button=e.target.closest && e.target.closest('.google-btn');
@@ -105,15 +121,24 @@
 
       const addLegalLinks=()=>{
         const footer=document.querySelector('.footer');
-        if(!footer||footer.querySelector('.footer-legal-links')) return;
-        const wrap=document.createElement('div');
-        wrap.className='footer-legal-links';
-        wrap.innerHTML='<div class="footer-legal-title">Legal & Support</div><a href="#privacy">Privacy Policy</a><a href="#terms">Terms & Conditions</a><a href="#refund">Refund & Cancellation</a><a href="#shipping">Shipping & Delivery</a><a href="#contact">Contact Us</a>';
-        footer.insertBefore(wrap,footer.querySelector('.copyright'));
+        if(!footer) return;
+        if(!footer.querySelector('.footer-legal-links')){
+          const wrap=document.createElement('div');
+          wrap.className='footer-legal-links';
+          wrap.innerHTML='<div class="footer-legal-title">Legal & Support</div><a href="#privacy">Privacy Policy</a><a href="#terms">Terms & Conditions</a><a href="#refund">Refund & Cancellation</a><a href="#shipping">Shipping & Delivery</a><a href="#contact">Contact Us</a>';
+          footer.insertBefore(wrap,footer.querySelector('.copyright'));
+        }
+        if(!document.querySelector('.oauth-purpose')){
+          const section=document.createElement('section');
+          section.className='oauth-purpose';
+          section.setAttribute('aria-label','About OmniUPI');
+          section.innerHTML='<h2>What is OmniUPI?</h2><p><strong>OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses.</strong> Merchants use OmniUPI to connect UPI payment accounts, create payment links, accept customer payments and manage transaction activity through merchant tools and analytics.</p><p>For account authentication, OmniUPI provides Google Sign-In. Google account information requested during sign-in is used to authenticate and create or access the merchant account. <a href="#privacy">Read our Privacy Policy</a> for details about data handling.</p>';
+          footer.parentNode.insertBefore(section,footer);
+        }
       };
       new MutationObserver(addLegalLinks).observe(document.getElementById('root'),{childList:true,subtree:true});
       addLegalLinks();
     </script>
-    <script type="module" src="/src/main.jsx?v=20260817-8"></script>
+    <script type="module" src="/src/main.jsx?v=20260818-1"></script>
   </body>
 </html>
