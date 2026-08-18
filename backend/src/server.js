@@ -7,6 +7,7 @@ import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import merchantRoutes from './routes/merchants.js';
 import adminRoutes from './routes/admin.js';
+import adminPaymentLinksRoutes from './routes/adminPaymentLinks.js';
 import gmailRoutes from './routes/gmail.js';
 import subscriptionRoutes from './routes/subscriptions.js';
 import accountRoutes from './routes/account.js';
@@ -27,7 +28,7 @@ const port=Number(process.env.PORT||5000);
 app.set('trust proxy',1);app.use(helmet());app.use(cors({origin:true,credentials:true}));app.use(express.json({limit:'15mb'}));app.use(express.urlencoded({extended:false,limit:'1mb'}));
 app.get('/health',(_req,res)=>res.json({ok:true,service:'omniupi-api',brand:'OmniUPI',website:'https://omniupi.in',api:'https://api.omniupi.in'}));
 app.get('/api/v1',(_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',version:'v1',website:'https://omniupi.in',docs:'https://omniupi.in/docs'}));
-app.use('/api/v1/auth',authRoutes);app.use('/api/v1/merchants',merchantRoutes);app.use('/api/v1/admin',adminRoutes);app.use('/api/v1/gmail',gmailRoutes);app.use('/api/v1/subscriptions',subscriptionRoutes);app.use('/api/v1/account',accountRoutes);app.use('/api/v1/orders',ordersRoutes);app.use('/api/v1/kyc',kycRoutes);app.use('/api/v1/kyc-config',kycConfigRoutes);app.use('/api/v1/videos',videoRoutes);app.use('/api/v1/support',supportRoutes);app.use('/api/v1/public-checkout',checkoutRoutes);app.use('/api',publicApiRoutes);
+app.use('/api/v1/auth',authRoutes);app.use('/api/v1/merchants',merchantRoutes);app.use('/api/v1/admin',adminRoutes);app.use('/api/v1/admin/payment-links',adminPaymentLinksRoutes);app.use('/api/v1/gmail',gmailRoutes);app.use('/api/v1/subscriptions',subscriptionRoutes);app.use('/api/v1/account',accountRoutes);app.use('/api/v1/orders',ordersRoutes);app.use('/api/v1/kyc',kycRoutes);app.use('/api/v1/kyc-config',kycConfigRoutes);app.use('/api/v1/videos',videoRoutes);app.use('/api/v1/support',supportRoutes);app.use('/api/v1/public-checkout',checkoutRoutes);app.use('/api',publicApiRoutes);
 app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({status:false,message:'Internal server error'});});
 
 async function ensureBootstrapAdmin(){
