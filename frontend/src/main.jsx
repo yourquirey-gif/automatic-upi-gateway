@@ -37,8 +37,6 @@ function Root() {
   if (hash === '#dashboard/apk') return <><OAuthBridge /><MerchantApkPage /></>;
   if (hash === '#dashboard/video') return <><OAuthBridge /><KycGate><VideoMerchant /></KycGate></>;
   if (hash === '#dashboard/docs') return <><OAuthBridge /><KycGate><Documentation /></KycGate></>;
-  if (hash === '#dashboard/support') return <><OAuthBridge /><SupportTicketPage /></>;
-  if (hash === '#dashboard/faq') return <><OAuthBridge /><FaqPage /></>;
   if (hash === '#subscription' || hash === '#dashboard/subscription') return <><OAuthBridge /><KycGate><SubscriptionPage /></KycGate></>;
   if (hash === '#dashboard/transactions') return <><OAuthBridge /><KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate></>;
   if (hash === '#dashboard/checkout') return <><OAuthBridge /><KycGate><CheckoutPage /></KycGate></>;
@@ -50,7 +48,7 @@ function Root() {
 
 function KycGate({ children }) {
   const [state,setState]=useState('loading'); const [approved,setApproved]=useState(false); const [wasBlocked,setWasBlocked]=useState(false);
-  useEffect(()=>{let alive=true;const check=async()=>{try{const [c,m]=await Promise.all([api('/kyc/config'),api('/kyc/me')]);if(!alive)return;const blocked=!!c.enabled&&m.kycStatus!=='VERIFIED';setState(blocked?'blocked':'ok');if(blocked)setWasBlocked(true);if(wasBlocked&&!blocked)setApproved(true)}catch{if(alive)setState('ok')}};check();const id=setInterval(check,5000);return()=>{alive=false;clearInterval(id)}},[wasBlocked]);
+  useEffect(()=>{let alive=true;const check=async()=>{try{const account=await api('/account');if(!alive)return;if(account.user?.role==='admin'){setState('ok');return}const [c,m]=await Promise.all([api('/kyc/config'),api('/kyc/me')]);if(!alive)return;const blocked=!!c.enabled&&m.kycStatus!=='VERIFIED';setState(blocked?'blocked':'ok');if(blocked)setWasBlocked(true);if(wasBlocked&&!blocked)setApproved(true)}catch{if(alive)setState('ok')}};check();const id=setInterval(check,5000);return()=>{alive=false;clearInterval(id)}},[wasBlocked]);
   if(state==='loading') return <div className="kyc-gate-loading">Checking account verification…</div>;
   if(state==='blocked') return <div className="kyc-gate"><div className="kyc-gate-card"><div className="kyc-gate-icon">✓</div><h1>KYC Verification Required</h1><p>Administrator has enabled mandatory KYC. Complete your Aadhaar + PAN verification before using the gateway.</p><button onClick={()=>{window.location.hash='dashboard/kyc'}}>Complete KYC</button><small>KYC fee is configured by the administrator.</small></div></div>;
   return <>{children}{approved&&<div className="kyc-popup"><div><div className="kyc-gate-icon">✓</div><h2>Your KYC Verified</h2><p>Your KYC has been successfully verified. You can now use the gateway.</p><button onClick={()=>setApproved(false)}>Continue</button></div></div>}</>;
