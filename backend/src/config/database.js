@@ -1,6 +1,11 @@
 import mongoose from 'mongoose';
 
-/** Remove unique owner indexes left by older Gmail verification schemas. */
+/**
+ * Remove unique indexes left behind by older Gmail verification schemas.
+ * Older deployments used a gmailVerification collection with a unique
+ * owner_1 index. The current schema stores Gmail connections per merchant,
+ * so owner must never be unique.
+ */
 async function repairLegacyGmailIndexes() {
   const db = mongoose.connection.db;
   if (!db) return;
