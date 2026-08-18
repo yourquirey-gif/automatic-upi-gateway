@@ -33,16 +33,21 @@ router.get('/callback', async (req, res, next) => {
       const merchant = await Merchant.findOne({ _id: payload.merchantId, owner: payload.sub });
       if (!merchant) return res.status(404).send('<h2>Merchant not found</h2>');
       const result = await verifyMerchantGmail({ merchant, client, email: me.data.email, refreshToken: tokens.refresh_token });
-      if (!result.verified) return res.type('html').send(`<!doctype html><html><body style="font-family:Arial;padding:32px;max-width:620px;margin:auto"><h2>Merchant verification pending</h2><p>${result.message}</p><p>Please use the Gmail account linked with this merchant/payment account, then try Verify Merchant again.</p><script>setTimeout(()=>window.close(),7000)</script></body></html>`);
-      return res.type('html').send('<!doctype html><html><body style="font-family:Arial;padding:32px;text-align:center"><h2 style="color:#159b77">✓ Merchant Verified</h2><p>Gmail is securely connected and payment verification is active.</p><script>setTimeout(()=>window.close(),1800)</script></body></html>');
+      const web = String(process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '');
+      const params = new URLSearchParams({ merchant_id: String(merchant._id), merchant_verified: result.verified ? '1' : '0', merchant_message: result.message || '' });
+      return res.redirect(`${web}/?${params.toString()}#merchant-verification`);
     }
 
+    // Only the dedicated administrator Gmail-connect flow requires administrator privileges.
+    // Merchant verification above is intentionally authenticated by the signed OAuth state.
+    const admin = await (await import('../models/User.js')).default.findOne({ _id: payload.sub, role: 'admin', status: 'active' });
+    if (!admin) return res.status(403).send('Administrator accounts must use administrator login.');
     await GmailConnection.findOneAndUpdate(
       { owner: payload.sub },
       { owner: payload.sub, email: me.data.email, refreshTokenEncrypted: encryptSecret(tokens.refresh_token), active: true },
       { upsert: true, new: true }
     );
-    res.send('<h2>Gmail connected</h2><p>You can close this window and return to OmniUPI Admin.</p>');
+    res.redirect(`${String(process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '')}/#admin`);
   } catch (error) { next(error); }
 });
 
