@@ -25,6 +25,16 @@ router.post('/', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+function safeReturnUrl(value) {
+  const candidate = String(value || '').trim();
+  if (!candidate) return null;
+  try {
+    const url = new URL(candidate);
+    const allowed = [process.env.PUBLIC_WEB_BASE_URL, process.env.ADMIN_WEB_BASE_URL].filter(Boolean).map(x => String(x).replace(/\/$/, ''));
+    return allowed.some(base => url.origin === new URL(base).origin) ? candidate : null;
+  } catch { return null; }
+}
+
 router.post('/:merchantId/verify', async (req, res, next) => {
   try {
     const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
@@ -32,7 +42,8 @@ router.post('/:merchantId/verify', async (req, res, next) => {
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Add the merchant UPI ID before verification.' });
     if (merchant.verificationStatus === 'verified') return res.json({ status: true, verified: true, merchant });
     const client = await createGoogleClient('gmail');
-    const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'merchant-gmail-verify' }, process.env.JWT_SECRET, { expiresIn: '10m' });
+    const returnUrl = safeReturnUrl(req.body?.returnUrl || req.query?.returnUrl);
+    const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'merchant-gmail-verify', returnUrl }, process.env.JWT_SECRET, { expiresIn: '10m' });
     const url = client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', state, scope: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'] });
     merchant.verificationStatus = 'verifying';
     merchant.verificationMessage = 'Please use the Gmail account linked with this merchant/payment account.';
