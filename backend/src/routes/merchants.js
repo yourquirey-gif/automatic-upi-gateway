@@ -25,6 +25,16 @@ router.post('/', async (req, res, next) => {
   } catch (error) { next(error); }
 });
 
+router.delete('/:merchantId', async (req, res, next) => {
+  try {
+    const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
+    if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+    await GmailConnection.deleteOne({ merchant: merchant._id });
+    await merchant.deleteOne();
+    res.json({ status: true, message: 'UPI ID removed successfully.' });
+  } catch (error) { next(error); }
+});
+
 function safeReturnUrl(value) {
   const candidate = String(value || '').trim();
   if (!candidate) return null;
