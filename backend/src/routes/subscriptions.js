@@ -13,8 +13,7 @@ import { verifySubscriptionOrderForAdmin } from '../services/subscriptionPayment
 const router = Router();
 
 router.get('/plans', async (_req, res, next) => {
-  try { res.json({ status: true, plans: await Plan.find({ active: true }).sort({ price: 1 }) }); }
-  catch (error) { next(error); }
+  try { res.json({ status: true, plans: await Plan.find({ active: true }).sort({ price: 1 }) }); } catch (error) { next(error); }
 });
 
 router.get('/verification', requireAuth, async (req, res, next) => {
@@ -59,12 +58,9 @@ router.get('/checkout/:orderId', requireAuth, async (req, res, next) => {
   try {
     const order = await SubscriptionOrder.findOne({ orderId: req.params.orderId, user: req.auth.sub }).populate('plan');
     if (!order) return res.status(404).json({ status: false, message: 'Subscription order not found' });
-    const settings = await GatewaySettings.findOne({ key: 'global' }).lean();
-    const adminIds = await User.find({ role: 'admin', status: 'active' }).distinct('_id');
-    const adminMerchant = await Merchant.findOne({ owner: { $in: adminIds }, provider: 'admin_settlement', verificationStatus: 'verified', status: 'active', upiId: order.paymentUrl ? { $exists: true } : { $exists: true } }).sort({ verifiedAt: -1 }).lean();
-    const upiId = adminMerchant?.upiId || settings?.subscriptionUpiId;
-    if (!upiId) return res.status(503).json({ status: false, message: 'Administrator payment UPI is not available.' });
-    const upiName = adminMerchant?.name || settings?.subscriptionUpiName || 'OmniUPI';
+    const parsed = new URL(order.paymentUrl);
+    const upiId = parsed.searchParams.get('pa') || '';
+    const upiName = parsed.searchParams.get('pn') || 'OmniUPI';
     const qrDataUrl = await QRCode.toDataURL(order.paymentUrl, { width: 320, margin: 2, errorCorrectionLevel: 'M' });
     res.json({ status: true, order: { orderId: order.orderId, amount: order.amount, plan: order.plan?.name || '', paymentUrl: order.paymentUrl, qrDataUrl, upiId, upiName, status: order.status } });
   } catch (error) { next(error); }
