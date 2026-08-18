@@ -6,7 +6,7 @@
     btn.className='nav-item';
     btn.setAttribute('data-blog-nav','1');
     btn.innerHTML='<span style="font-size:17px">✎</span><span>Blog Manager</span>';
-    btn.onclick=function(){window.location.href='/admin/blog.html';};
+    btn.onclick=function(){window.location.href='/blog.html';};
     nav.appendChild(btn);
   }
   const observer=new MutationObserver(addBlogNav);
