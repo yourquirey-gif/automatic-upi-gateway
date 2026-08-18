@@ -26,10 +26,13 @@
 
   function mount() {
     const landing = document.querySelector('.landing');
-    if (!landing || landing.querySelector('[data-omni-legal-footer]')) return false;
+    if (!landing) return false;
+
+    // Always keep exactly one footer on the landing page.
+    landing.querySelectorAll('[data-omni-legal-footer]').forEach(el => el.remove());
+    landing.querySelectorAll(':scope > .footer').forEach(el => el.remove());
+
     landing.insertAdjacentHTML('beforeend', footerHtml);
-    const old = landing.querySelector(':scope > .footer');
-    if (old) old.remove();
     return true;
   }
 
