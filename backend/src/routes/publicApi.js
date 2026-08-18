@@ -77,5 +77,5 @@ router.get('/payment/:orderId', async (req, res, next) => {
 
 function escapeHtml(v) { return String(v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 function escapeAttr(v) { return escapeHtml(v).replace(/`/g, '&#96;'); }
-router.get('/health', (_req, res) => res.json({ status: true, service: 'OmniUPI Public API', version: '1.5', website: CANONICAL_SITE, api: CANONICAL_API, paymentLinkExpirySeconds: 300 });
+router.get('/health', (_req, res) => res.json({ status: true, service: 'OmniUPI Public API', version: '1.5', website: CANONICAL_SITE, api: CANONICAL_API, paymentLinkExpirySeconds: 300 }));
 export default router;
