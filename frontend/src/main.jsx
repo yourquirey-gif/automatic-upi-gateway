@@ -26,7 +26,9 @@ function Root() {
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const onHashChange = () => setHash(window.location.hash); window.addEventListener('hashchange', onHashChange); return () => window.removeEventListener('hashchange', onHashChange); }, []);
   const legal = {'#privacy':'privacy','#terms':'terms','#refund':'refund','#shipping':'shipping','#contact':'contact'};
+  const legalPaths = {'/privacy-policy.html':'privacy','/terms.html':'terms','/refund-policy.html':'refund','/shipping-policy.html':'shipping','/contact.html':'contact'};
   if (legal[hash]) return <><OAuthBridge /><LegalPage type={legal[hash]} /></>;
+  if (legalPaths[window.location.pathname]) return <><OAuthBridge /><LegalPage type={legalPaths[window.location.pathname]} /></>;
   if (window.location.pathname === '/auth') return <><OAuthBridge /><SubscriptionPage /></>;
   if (hash === '#dashboard/account') return <><OAuthBridge /><AccountPage /></>;
   if (hash === '#dashboard/password') return <><OAuthBridge /><PasswordPage /></>;
