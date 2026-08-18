@@ -18,9 +18,11 @@ import videoRoutes from './routes/videos.js';
 import publicApiRoutes from './routes/publicApi.js';
 import checkoutRoutes from './routes/checkout.js';
 import supportRoutes from './routes/support.js';
+import blogRoutes, { adminBlogRoutes } from './routes/blogs.js';
 import User from './models/User.js';
 import GatewaySettings from './models/GatewaySettings.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
+import Blog from './models/Blog.js';
 import { verifyAllConnectedGmails } from './services/gmailPaymentVerifier.js';
 
 const app=express();
@@ -28,7 +30,8 @@ const port=Number(process.env.PORT||5000);
 app.set('trust proxy',1);app.use(helmet());app.use(cors({origin:true,credentials:true}));app.use(express.json({limit:'15mb'}));app.use(express.urlencoded({extended:false,limit:'1mb'}));
 app.get('/health',(_req,res)=>res.json({ok:true,service:'omniupi-api',brand:'OmniUPI',website:'https://omniupi.in',api:'https://api.omniupi.in'}));
 app.get('/api/v1',(_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',version:'v1',website:'https://omniupi.in',docs:'https://omniupi.in/docs'}));
-app.use('/api/v1/auth',authRoutes);app.use('/api/v1/merchants',merchantRoutes);app.use('/api/v1/admin',adminRoutes);app.use('/api/v1/admin/payment-links',adminPaymentLinksRoutes);app.use('/api/v1/gmail',gmailRoutes);app.use('/api/v1/subscriptions',subscriptionRoutes);app.use('/api/v1/account',accountRoutes);app.use('/api/v1/orders',ordersRoutes);app.use('/api/v1/kyc',kycRoutes);app.use('/api/v1/kyc-config',kycConfigRoutes);app.use('/api/v1/videos',videoRoutes);app.use('/api/v1/support',supportRoutes);app.use('/api/v1/public-checkout',checkoutRoutes);app.use('/api',publicApiRoutes);
+app.get('/sitemap.xml',async(_req,res)=>{try{const blogs=await Blog.find({status:'PUBLISHED',publishedAt:{$lte:new Date()}}).select('slug').sort({publishedAt:-1}).lean();const urls=[['https://omniupi.in/','daily','1.0'],['https://omniupi.in/blog.html','daily','0.8'],...blogs.map(b=>[`https://omniupi.in/blog/${encodeURIComponent(b.slug)}`,'weekly','0.7'])];const xml='<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(([loc,freq,priority])=>`<url><loc>${loc}</loc><changefreq>${freq}</changefreq><priority>${priority}</priority></url>`).join('')+'</urlset>';res.type('application/xml').set('Cache-Control','public, max-age=300, s-maxage=300').send(xml);}catch(e){console.error(e);res.status(500).type('application/xml').send('<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"></urlset>')}});
+app.use('/api/v1/auth',authRoutes);app.use('/api/v1/merchants',merchantRoutes);app.use('/api/v1/admin',adminRoutes);app.use('/api/v1/admin/payment-links',adminPaymentLinksRoutes);app.use('/api/v1/admin/blogs',adminBlogRoutes);app.use('/api/v1/gmail',gmailRoutes);app.use('/api/v1/subscriptions',subscriptionRoutes);app.use('/api/v1/account',accountRoutes);app.use('/api/v1/orders',ordersRoutes);app.use('/api/v1/kyc',kycRoutes);app.use('/api/v1/kyc-config',kycConfigRoutes);app.use('/api/v1/videos',videoRoutes);app.use('/api/v1/support',supportRoutes);app.use('/api/v1/public-checkout',checkoutRoutes);app.use('/api/v1/blogs',blogRoutes);app.use('/api',publicApiRoutes);
 app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({status:false,message:'Internal server error'});});
 
 async function ensureBootstrapAdmin(){
