@@ -4,8 +4,8 @@ import './home-legal-footer.css';
 const links = [
   ['Privacy Policy', '/privacy.html'],
   ['Terms & Conditions', '/terms.html'],
-  ['Refund & Cancellation', '/refund-policy.html'],
-  ['Shipping & Delivery', '/shipping-policy.html'],
+  ['Refund & Cancellation', '/refund.html'],
+  ['Shipping & Delivery', '/shipping.html'],
   ['Contact Us', '/contact.html'],
 ];
 
