@@ -9,86 +9,38 @@ import { encryptSecret } from '../utils/secretBox.js';
 
 const router = Router();
 
-function safeReturnUrl(value) {
-  const candidate = String(value || '').trim();
-  if (!candidate) return null;
-  try {
-    const url = new URL(candidate);
-    const allowed = [process.env.PUBLIC_WEB_BASE_URL, process.env.ADMIN_WEB_BASE_URL].filter(Boolean).map(x => String(x).replace(/\/$/, ''));
-    return allowed.some(base => url.origin === new URL(base).origin) ? candidate : null;
-  } catch { return null; }
-}
+function safeReturnUrl(value) { const candidate = String(value || '').trim(); if (!candidate) return null; try { const url = new URL(candidate); const allowed = [process.env.PUBLIC_WEB_BASE_URL, process.env.ADMIN_WEB_BASE_URL].filter(Boolean).map(x => String(x).replace(/\/$/, '')); return allowed.some(base => url.origin === new URL(base).origin) ? candidate : null; } catch { return null; } }
 
 router.get('/connect', requireAuth, requireAdmin, async (req, res, next) => {
   try {
-    const settings = await GatewaySettings.findOne({ key: 'global' }).lean();
-    const upiId = String(settings?.settlementUpiId || '').trim().toLowerCase();
+    const settings = await GatewaySettings.findOne({ key: 'global' }).lean(); const upiId = String(settings?.settlementUpiId || '').trim().toLowerCase();
     if (!upiId) return res.status(400).json({ status: false, message: 'First save the Admin Payment UPI ID in Gateway & Payment Settings.' });
-    const provider = String(req.query.provider || settings?.settlementProvider || 'UPI / Direct UPI').trim().slice(0, 80);
-    const mobile = String(req.query.mobile || settings?.settlementMobile || '').replace(/\D/g, '').slice(0, 10);
+    const provider = String(req.query.provider || settings?.settlementProvider || 'UPI / Direct UPI').trim().slice(0, 80); const mobile = String(req.query.mobile || settings?.settlementMobile || '').replace(/\D/g, '').slice(0, 10);
     if (mobile && mobile.length !== 10) return res.status(400).json({ status: false, message: 'Registered mobile must be 10 digits.' });
     let merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' });
     if (!merchant) merchant = await Merchant.create({ owner: req.auth.sub, name: settings?.settlementName || 'OmniUPI Settlement', provider: 'admin_settlement', upiId, mobile, config: { adminPaymentProvider: provider }, status: 'pending', verificationStatus: 'pending', verificationMessage: 'Verify this payment UPI using the linked Google/Gmail account.' });
-    else {
-      const changed = String(merchant.upiId || '').toLowerCase() !== upiId || String(merchant.config?.adminPaymentProvider || '') !== provider;
-      merchant.upiId = upiId; merchant.mobile = mobile || merchant.mobile; merchant.name = settings?.settlementName || merchant.name || 'OmniUPI Settlement';
-      merchant.config = { ...(merchant.config || {}), adminPaymentProvider: provider };
-      if (changed) { merchant.verificationStatus = 'pending'; merchant.status = 'pending'; merchant.verifiedAt = null; merchant.verifiedEmail = null; merchant.verificationMessage = 'Payment account details changed. Verify the new UPI using the linked Google/Gmail account.'; }
-      merchant.status = merchant.verificationStatus === 'verified' ? 'active' : 'pending';
-      await merchant.save();
-    }
-    const client = await createGoogleClient('gmail');
-    const returnUrl = safeReturnUrl(req.query.returnUrl);
-    const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'admin-upi-verify', returnUrl }, process.env.JWT_SECRET, { expiresIn: '10m' });
-    const url = client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', state, scope: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'] });
-    res.json({ status: true, url, upiId, provider, mobile, merchantId: merchant._id });
+    else { const changed = String(merchant.upiId || '').toLowerCase() !== upiId || String(merchant.config?.adminPaymentProvider || '') !== provider; merchant.upiId = upiId; merchant.mobile = mobile || merchant.mobile; merchant.name = settings?.settlementName || merchant.name || 'OmniUPI Settlement'; merchant.config = { ...(merchant.config || {}), adminPaymentProvider: provider }; if (changed) { merchant.verificationStatus = 'pending'; merchant.status = 'pending'; merchant.verifiedAt = null; merchant.verifiedEmail = null; merchant.verificationMessage = 'Payment account details changed. Verify the new UPI using the linked Google/Gmail account.'; } merchant.status = merchant.verificationStatus === 'verified' ? 'active' : 'pending'; await merchant.save(); }
+    const client = await createGoogleClient('gmail'); const returnUrl = safeReturnUrl(req.query.returnUrl); const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'admin-upi-verify', returnUrl }, process.env.JWT_SECRET, { expiresIn: '10m' });
+    const url = client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', state, scope: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'] }); res.json({ status: true, url, upiId, provider, mobile, merchantId: merchant._id });
   } catch (error) { next(error); }
 });
 
 router.get('/callback', async (req, res, next) => {
   try {
-    const payload = jwt.verify(String(req.query.state || ''), process.env.JWT_SECRET);
-    if (!payload?.sub || !['gmail-connect', 'merchant-gmail-verify', 'admin-upi-verify'].includes(payload.purpose)) return res.status(400).send('Invalid OAuth state');
-    const client = await createGoogleClient('gmail');
-    const { tokens } = await client.getToken(String(req.query.code || ''));
-    if (!tokens.refresh_token) return res.status(400).send('<h2>Gmail authorization failed</h2><p>Google did not return a refresh token. Please reconnect and grant consent again.</p>');
-    client.setCredentials(tokens);
-    const oauth2 = (await import('googleapis')).google.oauth2({ version: 'v2', auth: client });
-    const me = await oauth2.userinfo.get();
+    const payload = jwt.verify(String(req.query.state || ''), process.env.JWT_SECRET); if (!payload?.sub || !['gmail-connect', 'merchant-gmail-verify', 'admin-upi-verify'].includes(payload.purpose)) return res.status(400).send('Invalid OAuth state');
+    const client = await createGoogleClient('gmail'); const { tokens } = await client.getToken(String(req.query.code || '')); if (!tokens.refresh_token) return res.status(400).send('<h2>Gmail authorization failed</h2><p>Google did not return a refresh token. Please reconnect and grant consent again.</p>'); client.setCredentials(tokens); const oauth2 = (await import('googleapis')).google.oauth2({ version: 'v2', auth: client }); const me = await oauth2.userinfo.get();
     if (payload.purpose === 'merchant-gmail-verify' || payload.purpose === 'admin-upi-verify') {
-      const ownerFilter = payload.purpose === 'admin-upi-verify' ? { role: 'admin', status: 'active' } : {};
-      const User = (await import('../models/User.js')).default;
-      const owner = await User.findOne({ _id: payload.sub, ...ownerFilter });
-      if (!owner) return res.status(403).send('Account is not authorized for this verification flow.');
-      const merchant = await Merchant.findOne({ _id: payload.merchantId, owner: payload.sub });
-      if (!merchant) return res.status(404).send('<h2>UPI verification record not found</h2>');
-      const result = await verifyMerchantGmail({ merchant, client, email: me.data.email, refreshToken: tokens.refresh_token });
-      if (payload.purpose === 'admin-upi-verify' && result.verified) {
-        await GatewaySettings.findOneAndUpdate({ key: 'global' }, { subscriptionUpiId: merchant.upiId, subscriptionUpiName: merchant.name, settlementUpiId: merchant.upiId, settlementName: merchant.name, settlementProvider: merchant.config?.adminPaymentProvider || 'UPI / Direct UPI', settlementMobile: merchant.mobile || '' }, { upsert: true, new: true, setDefaultsOnInsert: true });
-      }
-      const fallback = String(process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '');
-      const destination = safeReturnUrl(payload.returnUrl) || `${fallback}/`;
-      const separator = destination.includes('?') ? '&' : '?';
-      const params = new URLSearchParams({ merchant_id: String(merchant._id), merchant_verified: result.verified ? '1' : '0', merchant_message: result.message || '' });
-      return res.redirect(`${destination}${separator}${params.toString()}#upi-verification`);
+      const ownerFilter = payload.purpose === 'admin-upi-verify' ? { role: 'admin', status: 'active' } : {}; const User = (await import('../models/User.js')).default; const owner = await User.findOne({ _id: payload.sub, ...ownerFilter }); if (!owner) return res.status(403).send('Account is not authorized for this verification flow.');
+      const merchant = await Merchant.findOne({ _id: payload.merchantId, owner: payload.sub }); if (!merchant) return res.status(404).send('<h2>UPI verification record not found</h2>');
+      const result = await verifyMerchantGmail({ merchant, client, email: me.data.email, refreshToken: tokens.refresh_token, requirePaymentMatch: payload.purpose !== 'admin-upi-verify' });
+      if (payload.purpose === 'admin-upi-verify' && result.verified) await GatewaySettings.findOneAndUpdate({ key: 'global' }, { subscriptionUpiId: merchant.upiId, subscriptionUpiName: merchant.name, settlementUpiId: merchant.upiId, settlementName: merchant.name, settlementProvider: merchant.config?.adminPaymentProvider || 'UPI / Direct UPI', settlementMobile: merchant.mobile || '' }, { upsert: true, new: true, setDefaultsOnInsert: true });
+      const fallback = String(process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, ''); const destination = safeReturnUrl(payload.returnUrl) || `${fallback}/`; const separator = destination.includes('?') ? '&' : '?'; const params = new URLSearchParams({ merchant_id: String(merchant._id), merchant_verified: result.verified ? '1' : '0', merchant_message: result.message || '' }); return res.redirect(`${destination}${separator}${params.toString()}#upi-verification`);
     }
-    const admin = await (await import('../models/User.js')).default.findOne({ _id: payload.sub, role: 'admin', status: 'active' });
-    if (!admin) return res.status(403).send('Administrator accounts must use administrator login.');
-    await GmailConnection.findOneAndUpdate({ owner: payload.sub }, { owner: payload.sub, email: me.data.email, refreshTokenEncrypted: encryptSecret(tokens.refresh_token), active: true }, { upsert: true, new: true });
-    res.redirect(`${String(process.env.ADMIN_WEB_BASE_URL || process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '')}/#admin`);
+    const admin = await (await import('../models/User.js')).default.findOne({ _id: payload.sub, role: 'admin', status: 'active' }); if (!admin) return res.status(403).send('Administrator accounts must use administrator login.'); await GmailConnection.findOneAndUpdate({ owner: payload.sub }, { owner: payload.sub, email: me.data.email, refreshTokenEncrypted: encryptSecret(tokens.refresh_token), active: true }, { upsert: true, new: true }); res.redirect(`${String(process.env.ADMIN_WEB_BASE_URL || process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '')}/#admin`);
   } catch (error) { next(error); }
 });
 
-router.post('/sync', requireAuth, requireAdmin, async (req, res, next) => {
-  try { res.json({ status: true, result: await verifyPendingOrdersForAdmin(req.auth.sub) }); } catch (error) { next(error); }
-});
-
-router.get('/status', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true });
-    const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' }).lean();
-    res.json({ status: true, connected: !!connection, email: connection?.email || null, lastCheckedAt: connection?.lastCheckedAt || null, upiVerification: merchant ? { upiId: merchant.upiId, status: merchant.verificationStatus, merchantStatus: merchant.status, verifiedEmail: merchant.verifiedEmail || null, verifiedAt: merchant.verifiedAt || null, message: merchant.verificationMessage || '', provider: merchant.config?.adminPaymentProvider || 'UPI / Direct UPI', mobile: merchant.mobile || null } : null });
-  } catch (error) { next(error); }
-});
+router.post('/sync', requireAuth, requireAdmin, async (req, res, next) => { try { res.json({ status: true, result: await verifyPendingOrdersForAdmin(req.auth.sub) }); } catch (error) { next(error); } });
+router.get('/status', requireAuth, requireAdmin, async (req, res, next) => { try { const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true }); const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' }).lean(); res.json({ status: true, connected: !!connection, email: connection?.email || null, lastCheckedAt: connection?.lastCheckedAt || null, upiVerification: merchant ? { upiId: merchant.upiId, status: merchant.verificationStatus, merchantStatus: merchant.status, verifiedEmail: merchant.verifiedEmail || null, verifiedAt: merchant.verifiedAt || null, message: merchant.verificationMessage || '', provider: merchant.config?.adminPaymentProvider || 'UPI / Direct UPI', mobile: merchant.mobile || null } : null }); } catch (error) { next(error); } });
 
 export default router;
