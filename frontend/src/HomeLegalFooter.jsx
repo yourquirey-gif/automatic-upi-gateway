@@ -2,11 +2,11 @@ import React from 'react';
 import './home-legal-footer.css';
 
 const links = [
-  ['Privacy Policy', '#privacy'],
-  ['Terms & Conditions', '#terms'],
-  ['Refund & Cancellation', '#refund'],
-  ['Shipping & Delivery', '#shipping'],
-  ['Contact Us', '#contact'],
+  ['Privacy Policy', '/privacy-policy.html'],
+  ['Terms & Conditions', '/terms.html'],
+  ['Refund & Cancellation', '/refund-policy.html'],
+  ['Shipping & Delivery', '/shipping-policy.html'],
+  ['Contact Us', '/contact.html'],
 ];
 
 export default function HomeLegalFooter() {
