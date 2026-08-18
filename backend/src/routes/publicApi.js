@@ -4,36 +4,19 @@ import QRCode from 'qrcode';
 import User from '../models/User.js';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
+import { verifyPendingOrdersForAdmin } from '../services/gmailPaymentVerifier.js';
 
 const router = Router();
 const CANONICAL_SITE = 'https://omniupi.in';
 const CANONICAL_API = 'https://api.omniupi.in';
 
-function getApiToken(req) {
-  const authorization = String(req.headers.authorization || '');
-  if (/^Bearer\s+/i.test(authorization)) return authorization.replace(/^Bearer\s+/i, '').trim();
-  return String(req.body?.user_token || req.body?.api_token || req.headers['x-api-key'] || '').trim();
-}
-async function requireApiUser(req, res, next) {
-  try {
-    const token = getApiToken(req);
-    if (!token) return res.status(401).json({ status: false, message: 'API token is required' });
-    const user = await User.findOne({ apiToken: token, status: 'active', role: 'merchant' }).select('+apiToken +instanceSecret webhookUrl userId name email');
-    if (!user) return res.status(401).json({ status: false, message: 'Invalid or inactive API token' });
-    req.apiUser = user; next();
-  } catch (error) { next(error); }
-}
+function getApiToken(req) { const authorization = String(req.headers.authorization || ''); if (/^Bearer\s+/i.test(authorization)) return authorization.replace(/^Bearer\s+/i, '').trim(); return String(req.body?.user_token || req.body?.api_token || req.headers['x-api-key'] || '').trim(); }
+async function requireApiUser(req, res, next) { try { const token = getApiToken(req); if (!token) return res.status(401).json({ status: false, message: 'API token is required' }); const user = await User.findOne({ apiToken: token, status: 'active', role: { $in: ['merchant','admin'] } }).select('+apiToken +instanceSecret webhookUrl userId name email role'); if (!user) return res.status(401).json({ status: false, message: 'Invalid or inactive API token' }); req.apiUser = user; next(); } catch (error) { next(error); } }
 function cleanString(value, max = 500) { return String(value ?? '').trim().slice(0, max); }
 function makeOrderId() { return `${Date.now()}${crypto.randomBytes(4).toString('hex')}`.slice(0, 24); }
 function buildPaymentUrl(_req, order) { return `${CANONICAL_SITE}/pay?order_id=${encodeURIComponent(order.orderId)}`; }
-function buildUpiUrl(order, merchant) {
-  const pa = cleanString(merchant.upiId, 200), pn = cleanString(merchant.name || merchant.provider || 'Merchant', 80), tn = cleanString(order.remark1 || `Payment ${order.orderId}`, 80);
-  return `upi://pay?${new URLSearchParams({ pa, pn, am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn }).toString()}`;
-}
-function checkoutConfig(merchant) {
-  const c = merchant?.config?.checkout || {};
-  return { brandName: cleanString(c.brandName || merchant?.name || 'Merchant', 100), themeColor: /^#[0-9a-fA-F]{6}$/.test(c.themeColor || '') ? c.themeColor : '#0B95BD', instructions: cleanString(c.instructions || '', 3000), showQrCode: c.showQrCode !== false, showIntentButtons: c.showIntentButtons !== false, brandLogo: typeof c.brandLogo === 'string' ? c.brandLogo : '' };
-}
+function buildUpiUrl(order, merchant) { const pa = cleanString(merchant.upiId, 200), pn = cleanString(merchant.name || merchant.provider || 'Merchant', 80), tn = cleanString(order.remark1 || `Payment ${order.orderId}`, 80); return `upi://pay?${new URLSearchParams({ pa, pn, am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn }).toString()}`; }
+function checkoutConfig(merchant) { const c = merchant?.config?.checkout || {}; return { brandName: cleanString(c.brandName || merchant?.name || 'Merchant', 100), themeColor: /^#[0-9a-fA-F]{6}$/.test(c.themeColor || '') ? c.themeColor : '#0B95BD', instructions: cleanString(c.instructions || '', 3000), showQrCode: c.showQrCode !== false, showIntentButtons: c.showIntentButtons !== false, brandLogo: typeof c.brandLogo === 'string' ? c.brandLogo : '' }; }
 
 router.post('/create-order', requireApiUser, async (req, res, next) => {
   try {
@@ -41,10 +24,12 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ status: false, message: 'amount must be a positive number' });
     if (amount > 1000000) return res.status(400).json({ status: false, message: 'amount exceeds the allowed limit' });
     if (redirectUrl && !/^https?:\/\//i.test(redirectUrl)) return res.status(400).json({ status: false, message: 'redirect_url must include http or https' });
-    const merchantId = cleanString(req.body?.merchant_id || req.body?.merchantId, 100), merchantQuery = { owner: req.apiUser._id, status: 'active' };
+    const merchantId = cleanString(req.body?.merchant_id || req.body?.merchantId, 100);
+    const merchantQuery = { owner: req.apiUser._id, status: 'active' };
+    if (req.apiUser.role === 'admin' && !merchantId) merchantQuery.provider = 'admin_settlement';
     if (merchantId) merchantQuery._id = merchantId;
     const merchant = await Merchant.findOne(merchantQuery).sort({ createdAt: -1 });
-    if (!merchant) return res.status(400).json({ status: false, message: 'No active merchant connection found. Connect your merchant account first.' });
+    if (!merchant) return res.status(400).json({ status: false, message: 'No active merchant connection found. Verify the payment UPI first.' });
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Merchant UPI ID is not configured' });
     const orderId = requestedOrderId || makeOrderId();
     if (await Order.exists({ orderId })) return res.status(409).json({ status: false, message: 'order_id already exists' });
@@ -59,24 +44,18 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
 router.post('/check-order-status', requireApiUser, async (req, res, next) => {
   try {
     const orderId = cleanString(req.body?.order_id || req.body?.orderId, 100); if (!orderId) return res.status(400).json({ status: false, message: 'order_id is required' });
-    const order = await Order.findOne({ orderId, owner: req.apiUser._id }).lean(); if (!order) return res.status(404).json({ status: false, message: 'Order not found' });
+    const existing = await Order.findOne({ orderId, owner: req.apiUser._id }).lean(); if (!existing) return res.status(404).json({ status: false, message: 'Order not found' });
+    if (existing.status === 'PENDING') await verifyPendingOrdersForAdmin(req.apiUser._id).catch(error => console.error('On-demand Gmail verification failed:', error.message));
+    const order = await Order.findOne({ orderId, owner: req.apiUser._id }).lean();
     res.json({ status: true, message: order.status === 'SUCCESS' ? 'Transaction Successfully' : `Transaction ${order.status}`, result: { txnStatus: order.status, orderId: order.orderId, order_id: order.orderId, amount: Number(order.amount).toFixed(2), date: order.paidAt || order.createdAt, utr: order.utr || null, customerMobile: order.customerMobile || null, redirectUrl: order.redirectUrl || null, remark1: order.remark1 || null, remark2: order.remark2 || null } });
   } catch (error) { next(error); }
 });
 
-router.get('/payment/:orderId/status', async (req, res, next) => {
-  try {
-    const order = await Order.findOne({ orderId: req.params.orderId }).select('orderId amount status paidAt utr redirectUrl').lean();
-    if (!order) return res.status(404).json({ status: false, message: 'Order not found' });
-    res.set('Cache-Control', 'no-store, max-age=0');
-    res.json({ status: true, result: { txnStatus: order.status, orderId: order.orderId, amount: Number(order.amount).toFixed(2), paidAt: order.paidAt || null, utr: order.utr || null, redirectUrl: order.redirectUrl || null } });
-  } catch (error) { next(error); }
-});
+router.get('/payment/:orderId/status', async (req, res, next) => { try { const order = await Order.findOne({ orderId: req.params.orderId }).select('orderId amount status paidAt utr redirectUrl').lean(); if (!order) return res.status(404).json({ status: false, message: 'Order not found' }); res.set('Cache-Control', 'no-store, max-age=0'); res.json({ status: true, result: { txnStatus: order.status, orderId: order.orderId, amount: Number(order.amount).toFixed(2), paidAt: order.paidAt || null, utr: order.utr || null, redirectUrl: order.redirectUrl || null } }); } catch (error) { next(error); } });
 
 router.get('/payment/:orderId', async (req, res, next) => {
   try {
-    const order = await Order.findOne({ orderId: req.params.orderId }).populate('merchant').lean();
-    if (!order) return res.status(404).send('<h1>Order not found</h1>');
+    const order = await Order.findOne({ orderId: req.params.orderId }).populate('merchant').lean(); if (!order) return res.status(404).send('<h1>Order not found</h1>');
     if (order.status === 'SUCCESS') { const redirect = order.redirectUrl ? `<script>location.replace(${JSON.stringify(order.redirectUrl)});</script>` : ''; return res.type('html').send(`<!doctype html><html><body style="font-family:Arial;text-align:center;padding:40px"><h1>Payment Successful</h1><p>Order: ${order.orderId}</p>${redirect}</body></html>`); }
     const merchant = order.merchant || {}, c = checkoutConfig(merchant), upiUrl = buildUpiUrl(order, merchant), safeUpi = JSON.stringify(upiUrl), qr = c.showQrCode ? await QRCode.toDataURL(upiUrl, { margin: 1, width: 260, errorCorrectionLevel: 'M' }) : '';
     const instructions = c.instructions ? c.instructions.split(/\r?\n/).map(x => x.trim()).filter(Boolean).map(x => `<li>${escapeHtml(x)}</li>`).join('') : '';
@@ -92,5 +71,5 @@ router.get('/payment/:orderId', async (req, res, next) => {
 
 function escapeHtml(v) { return String(v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
 function escapeAttr(v) { return escapeHtml(v).replace(/`/g, '&#96;'); }
-router.get('/health', (_req, res) => res.json({ status: true, service: 'OmniUPI Public API', version: '1.3', website: CANONICAL_SITE, api: CANONICAL_API }));
+router.get('/health', (_req, res) => res.json({ status: true, service: 'OmniUPI Public API', version: '1.4', website: CANONICAL_SITE, api: CANONICAL_API }));
 export default router;
