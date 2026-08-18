@@ -22,6 +22,7 @@ import './styles.css';
 import './dashboard.css';
 import './kyc.css';
 import './video-merchant.css';
+import './payment-link-fix.css';
 
 function Root() {
   const [hash, setHash] = useState(window.location.hash);
