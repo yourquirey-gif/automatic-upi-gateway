@@ -3,15 +3,12 @@ import mongoose from 'mongoose';
 async function repairLegacyGmailIndexes() {
   const db = mongoose.connection.db;
   if (!db) return;
-  const collections = ['gmailVerification', 'gmailVerifications', 'gmailConnections'];
-  for (const name of collections) {
+  for (const name of ['gmailVerification', 'gmailVerifications', 'gmailConnections']) {
     try {
       const collection = db.collection(name);
-      const indexes = await collection.listIndexes().toArray();
-      for (const index of indexes) {
+      for (const index of await collection.listIndexes().toArray()) {
         const key = index?.key || {};
-        const isOwnerOnly = Object.keys(key).length === 1 && key.owner === 1;
-        if (isOwnerOnly && index.name) {
+        if (Object.keys(key).length === 1 && key.owner === 1 && index.name) {
           try { await collection.dropIndex(index.name); console.log(`Removed legacy Gmail owner index: ${name}.${index.name}`); }
           catch (error) { if (!/index not found|ns not found|not found/i.test(String(error?.message || ''))) throw error; }
         }
