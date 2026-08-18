@@ -5,6 +5,7 @@ import OAuthBridge from './OAuthBridge.jsx';
 import LegalPage from './LegalPages.jsx';
 import Transactions from './Transactions.jsx';
 import { CheckoutPage, PaymentLinkPage, PublicPaymentPage } from './CheckoutRoutesV2.jsx';
+import { PaymentLinkPageFixed, PublicPaymentPageFixed } from './PaymentLinkFixed.jsx';
 import SubscriptionPage from './SubscriptionPage.jsx';
 import AccountPage from './AccountPage.jsx';
 import PasswordPage from './PasswordPage.jsx';
@@ -40,8 +41,8 @@ function Root() {
   if (hash === '#subscription' || hash === '#dashboard/subscription') return <><OAuthBridge /><KycGate><SubscriptionPage /></KycGate></>;
   if (hash === '#dashboard/transactions') return <><OAuthBridge /><KycGate><Transactions onBack={() => { window.location.hash = 'dashboard'; }} /></KycGate></>;
   if (hash === '#dashboard/checkout') return <><OAuthBridge /><KycGate><CheckoutPage /></KycGate></>;
-  if (hash === '#dashboard/payment-link') return <><OAuthBridge /><KycGate><PaymentLinkPage /></KycGate></>;
-  if (hash.startsWith('#pay?')) return <><OAuthBridge /><PublicPaymentPage route={hash} /></>;
+  if (hash === '#dashboard/payment-link') return <><OAuthBridge /><KycGate><PaymentLinkPageFixed /></KycGate></>;
+  if (hash.startsWith('#pay?')) return <><OAuthBridge /><PublicPaymentPageFixed route={hash} /></>;
   if (hash === '#dashboard' || hash.startsWith('#dashboard/')) return <><OAuthBridge /><KycGate><App /></KycGate></>;
   return <><OAuthBridge /><App /><HomeLegalFooter /></>;
 }
