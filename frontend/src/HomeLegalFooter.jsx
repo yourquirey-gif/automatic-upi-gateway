@@ -12,11 +12,17 @@ const links = [
 export default function HomeLegalFooter() {
   return <footer className="home-legal-footer">
     <div className="home-legal-inner">
-      <section className="omni-purpose">
+      <section className="omni-purpose" aria-labelledby="omni-purpose-title">
         <div className="purpose-kicker">PURPOSE OF OMNIUPI</div>
-        <h2>Built to simplify UPI payments for modern businesses.</h2>
-        <p>OmniUPI provides UPI payment infrastructure and merchant tools that help businesses connect payment accounts, create payment links, accept customer payments and manage transaction activity from one place.</p>
-        <p>Our platform is designed to make payment workflows simpler, faster and easier to manage, while giving merchants clear visibility into their payment operations. When a user chooses Google Sign-In, basic Google account information made available by Google is used to securely authenticate the user and create or access the OmniUPI merchant account, as described in our Privacy Policy.</p>
+        <h2 id="omni-purpose-title">UPI payment infrastructure for modern businesses.</h2>
+        <p>OmniUPI is a merchant payment platform designed to help businesses connect supported UPI payment accounts, create payment links and checkout experiences, accept customer payments, and monitor transaction activity from one dashboard.</p>
+        <div className="purpose-grid">
+          <article className="purpose-card"><strong>Connect &amp; manage</strong><span>Connect supported merchant payment accounts and manage payment settings from one place.</span></article>
+          <article className="purpose-card"><strong>Accept payments</strong><span>Create payment links and customer checkout flows for collecting UPI payments.</span></article>
+          <article className="purpose-card"><strong>Track activity</strong><span>View transaction status, payment activity and merchant analytics through the dashboard.</span></article>
+          <article className="purpose-card"><strong>Account information</strong><span>Basic account information is used to create, secure and operate your OmniUPI merchant account and provide the requested services.</span></article>
+        </div>
+        <p className="purpose-note">We request account information only for authentication, account management, security and the OmniUPI features you choose to use. Details about collection, use, storage and sharing of personal and account information are provided in our Privacy Policy.</p>
       </section>
 
       <div className="legal-footer-grid">
