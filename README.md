@@ -34,6 +34,8 @@ The administrator is bootstrapped securely from hosting-provider environment var
 
 The public landing-page footer includes a direct **Blog** link to `/blog.html`. The public blog listing, article pages, related-article cards, and admin Blog Manager are deployed from this repository.
 
+Production deployment verification: the landing footer and public blog routes are kept in sync with the Vercel frontend build.
+
 ## Security
 
 Never commit API secrets, OAuth client secrets, tokens, webhook secrets, or production credentials.
