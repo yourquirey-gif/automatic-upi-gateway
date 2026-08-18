@@ -30,6 +30,10 @@ The backend also exposes a health endpoint at:
 
 The administrator is bootstrapped securely from hosting-provider environment variables. Admin accounts are permanent and do not require a subscription or plan. Never commit the admin password or JWT secret to GitHub.
 
+## Website navigation
+
+The public landing-page footer includes a direct **Blog** link to `/blog.html`. The public blog listing, article pages, related-article cards, and admin Blog Manager are deployed from this repository.
+
 ## Security
 
 Never commit API secrets, OAuth client secrets, tokens, webhook secrets, or production credentials.
