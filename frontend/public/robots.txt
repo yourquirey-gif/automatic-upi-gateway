@@ -1,2 +1,10 @@
 User-agent: *
 Allow: /
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /dashboard.html
+Disallow: /gateway.html
+Disallow: /pay/
+Disallow: /oauth-callback.html
+
+Sitemap: https://omniupi.in/sitemap.xml
