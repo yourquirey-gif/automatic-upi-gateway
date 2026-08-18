@@ -24,14 +24,16 @@
       </div>
     </footer>`;
 
+  function removeOldFooters(landing) {
+    // Remove the original App.jsx footer (.footer) and any previously injected duplicates.
+    landing.querySelectorAll('.footer').forEach(el => el.remove());
+    landing.querySelectorAll('[data-omni-legal-footer]').forEach(el => el.remove());
+  }
+
   function mount() {
     const landing = document.querySelector('.landing');
     if (!landing) return false;
-
-    // Always keep exactly one footer on the landing page.
-    landing.querySelectorAll('[data-omni-legal-footer]').forEach(el => el.remove());
-    landing.querySelectorAll(':scope > .footer').forEach(el => el.remove());
-
+    removeOldFooters(landing);
     landing.insertAdjacentHTML('beforeend', footerHtml);
     return true;
   }
