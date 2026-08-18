@@ -17,7 +17,7 @@
         <div class="legal-footer-grid">
           <div class="legal-footer-brand"><div class="legal-footer-logo"><span>ϟ</span> OmniUPI</div><p>Modern UPI payment infrastructure for businesses.</p></div>
           <div class="legal-footer-links-wrap"><div class="legal-footer-title">LEGAL &amp; SUPPORT</div><nav class="legal-footer-links" aria-label="Legal and support links">
-            <a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms &amp; Conditions</a><a href="/refund.html">Refund &amp; Cancellation</a><a href="/shipping.html">Shipping &amp; Delivery</a><a href="/contact.html">Contact Us</a>
+            <a href="/blog.html">Blog</a><a href="/privacy.html">Privacy Policy</a><a href="/terms.html">Terms &amp; Conditions</a><a href="/refund.html">Refund &amp; Cancellation</a><a href="/shipping.html">Shipping &amp; Delivery</a><a href="/contact.html">Contact Us</a>
           </nav></div>
         </div>
         <div class="legal-footer-bottom"><span>© 2026 OmniUPI. All rights reserved.</span><span>Secure • Reliable • Built for businesses</span></div>
