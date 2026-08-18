@@ -1,0 +1,65 @@
+name: Add Blog Footer Link
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-footer:
+    if: ${{ !contains(github.event.head_commit.message, '[blog-footer-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Add Blog link to landing footer
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text(encoding='utf-8')
+          if 'href="/blog.html"' in s or "href='/blog.html'" in s:
+              print('Blog footer link already present')
+              raise SystemExit(0)
+          old = '<div><h3>Support</h3><button onclick="openAuth(\'login\')">Help Center</button><button>Privacy Policy</button><button>Terms of Service</button></div>'
+          new = '<div><h3>Support</h3><button onclick="openAuth(\'login\')">Help Center</button><a class="footer-blog-link" href="/blog.html">Blog</a><button>Privacy Policy</button><button>Terms of Service</button></div>'
+          if old not in s:
+              raise SystemExit('Expected footer Support block was not found; no changes made.')
+          s = s.replace(old, new, 1)
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Style Blog link and commit
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path('landing.css')
+          s=p.read_text(encoding='utf-8')
+          rule='.footer-blog-link{display:block;text-align:left;border:0;background:none;color:#929db1;padding:6px 0;font:11px inherit;cursor:pointer;text-decoration:none}.footer-blog-link:hover{color:#fff}'
+          if '.footer-blog-link' not in s:
+              s += '\n'+rule+'\n'
+              p.write_text(s,encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add index.html landing.css
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+          else
+            git commit -m 'Add Blog link to website footer [blog-footer-fix]'
+            git push
+          fi
+      - name: Remove one-time workflow
+        if: success()
+        shell: bash
+        run: |
+          rm -f .github/workflows/blog-footer-fix.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .github/workflows/blog-footer-fix.yml
+          git commit -m 'Remove one-time blog footer workflow [blog-footer-fix]'
+          git push
