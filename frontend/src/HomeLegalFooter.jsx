@@ -7,6 +7,7 @@ const links = [
   ['Refund & Cancellation', '/refund.html'],
   ['Shipping & Delivery', '/shipping.html'],
   ['Contact Us', '/contact.html'],
+  ['Blog', '/blog.html'],
 ];
 
 export default function HomeLegalFooter() {
