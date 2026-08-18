@@ -18,6 +18,8 @@ const gatewaySettingsSchema = new mongoose.Schema({
   webhookBaseUrl: { type: String, trim: true, default: '' },
   settlementUpiId: { type: String, trim: true, default: '' },
   settlementName: { type: String, trim: true, default: '' },
+  settlementProvider: { type: String, trim: true, default: '' },
+  settlementMobile: { type: String, trim: true, default: '' },
   subscriptionUpiId: { type: String, trim: true, default: '' },
   subscriptionUpiName: { type: String, trim: true, default: '' },
   subscriptionPaymentLink: { type: String, trim: true, default: '' },
