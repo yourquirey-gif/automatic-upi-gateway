@@ -10,6 +10,7 @@ const orderSchema = new mongoose.Schema({
   remark1: String,
   remark2: String,
   paymentUrl: String,
+  expiresAt: { type: Date, required: true, index: true },
   status: { type: String, enum: ['PENDING', 'SUCCESS', 'FAILED', 'EXPIRED'], default: 'PENDING', index: true },
   utr: { type: String, trim: true },
   paidAt: Date,
