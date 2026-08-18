@@ -16,7 +16,7 @@ export default function HomeLegalFooter() {
         <div className="purpose-kicker">PURPOSE OF OMNIUPI</div>
         <h2>Built to simplify UPI payments for modern businesses.</h2>
         <p>OmniUPI provides UPI payment infrastructure and merchant tools that help businesses connect payment accounts, create payment links, accept customer payments and manage transaction activity from one place.</p>
-        <p>Our platform is designed to make payment workflows simpler, faster and easier to manage, while giving merchants clear visibility into their payment operations.</p>
+        <p>Our platform is designed to make payment workflows simpler, faster and easier to manage, while giving merchants clear visibility into their payment operations. When a user chooses Google Sign-In, basic Google account information made available by Google is used to securely authenticate the user and create or access the OmniUPI merchant account, as described in our Privacy Policy.</p>
       </section>
 
       <div className="legal-footer-grid">
