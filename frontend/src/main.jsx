@@ -15,6 +15,7 @@ import VideoMerchant from './VideoMerchant.jsx';
 import Documentation from './Documentation.jsx';
 import SupportTicketPage from './SupportTicketPage.jsx';
 import FaqPage from './FaqPage.jsx';
+import HomeLegalFooter from './HomeLegalFooter.jsx';
 import { api } from './api';
 import './styles.css';
 import './dashboard.css';
@@ -42,7 +43,7 @@ function Root() {
   if (hash === '#dashboard/payment-link') return <><OAuthBridge /><KycGate><PaymentLinkPage /></KycGate></>;
   if (hash.startsWith('#pay?')) return <><OAuthBridge /><PublicPaymentPage route={hash} /></>;
   if (hash === '#dashboard' || hash.startsWith('#dashboard/')) return <><OAuthBridge /><KycGate><App /></KycGate></>;
-  return <><OAuthBridge /><App /></>;
+  return <><OAuthBridge /><App /><HomeLegalFooter /></>;
 }
 
 function KycGate({ children }) {
