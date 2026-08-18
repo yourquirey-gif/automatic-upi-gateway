@@ -2,7 +2,7 @@ import React from 'react';
 import './home-legal-footer.css';
 
 const links = [
-  ['Privacy Policy', '/privacy-policy.html'],
+  ['Privacy Policy', '/privacy.html'],
   ['Terms & Conditions', '/terms.html'],
   ['Refund & Cancellation', '/refund-policy.html'],
   ['Shipping & Delivery', '/shipping-policy.html'],
@@ -24,24 +24,8 @@ export default function HomeLegalFooter() {
         </div>
         <p className="purpose-note">We request account information only for authentication, account management, security and the OmniUPI features you choose to use. Details about collection, use, storage and sharing of personal and account information are provided in our Privacy Policy.</p>
       </section>
-
-      <div className="legal-footer-grid">
-        <div className="legal-footer-brand">
-          <div className="legal-footer-logo"><span>ϟ</span> OmniUPI</div>
-          <p>Modern UPI payment infrastructure for businesses.</p>
-        </div>
-        <div className="legal-footer-links-wrap">
-          <div className="legal-footer-title">LEGAL &amp; SUPPORT</div>
-          <nav className="legal-footer-links" aria-label="Legal and support links">
-            {links.map(([label, href]) => <a href={href} key={href}>{label}</a>)}
-          </nav>
-        </div>
-      </div>
-
-      <div className="legal-footer-bottom">
-        <span>© 2026 OmniUPI. All rights reserved.</span>
-        <span>Secure • Reliable • Built for businesses</span>
-      </div>
+      <div className="legal-footer-grid"><div className="legal-footer-brand"><div className="legal-footer-logo"><span>ϟ</span> OmniUPI</div><p>Modern UPI payment infrastructure for businesses.</p></div><div className="legal-footer-links-wrap"><div className="legal-footer-title">LEGAL &amp; SUPPORT</div><nav className="legal-footer-links" aria-label="Legal and support links">{links.map(([label, href]) => <a href={href} key={href}>{label}</a>)}</nav></div></div>
+      <div className="legal-footer-bottom"><span>© 2026 OmniUPI. All rights reserved.</span><span>Secure • Reliable • Built for businesses</span></div>
     </div>
   </footer>;
 }
