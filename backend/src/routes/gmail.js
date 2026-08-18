@@ -14,12 +14,16 @@ router.get('/connect', requireAuth, requireAdmin, async (req, res, next) => {
     const settings = await GatewaySettings.findOne({ key: 'global' }).lean();
     const upiId = String(settings?.settlementUpiId || '').trim().toLowerCase();
     if (!upiId) return res.status(400).json({ status: false, message: 'First save the Settlement UPI ID in Gateway & Payment Settings.' });
+    const provider = String(req.query.provider || 'UPI / Direct UPI').trim().slice(0, 80);
+    const mobile = String(req.query.mobile || '').replace(/\D/g, '').slice(0, 10);
     let merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' });
-    if (!merchant) merchant = await Merchant.create({ owner: req.auth.sub, name: settings?.settlementName || 'OmniUPI Settlement', provider: 'admin_settlement', upiId, status: 'pending', verificationStatus: 'pending', verificationMessage: 'Verify this settlement UPI using the linked Google/Gmail account.' });
+    if (!merchant) merchant = await Merchant.create({ owner: req.auth.sub, name: settings?.settlementName || 'OmniUPI Settlement', provider: 'admin_settlement', upiId, mobile, config: { adminPaymentProvider: provider }, status: 'pending', verificationStatus: 'pending', verificationMessage: 'Verify this settlement UPI using the linked Google/Gmail account.' });
     else {
       const changed = String(merchant.upiId || '').toLowerCase() !== upiId;
       merchant.upiId = upiId;
+      merchant.mobile = mobile || merchant.mobile;
       merchant.name = settings?.settlementName || merchant.name || 'OmniUPI Settlement';
+      merchant.config = { ...(merchant.config || {}), adminPaymentProvider: provider };
       if (changed) merchant.verificationStatus = 'pending';
       merchant.status = merchant.verificationStatus === 'verified' ? 'active' : 'pending';
       merchant.verificationMessage = merchant.verificationStatus === 'verified' ? merchant.verificationMessage : 'Verify this settlement UPI using the linked Google/Gmail account.';
@@ -75,7 +79,7 @@ router.get('/status', requireAuth, requireAdmin, async (req, res, next) => {
   try {
     const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true });
     const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' }).lean();
-    res.json({ status: true, connected: !!connection, email: connection?.email || null, lastCheckedAt: connection?.lastCheckedAt || null, upiVerification: merchant ? { upiId: merchant.upiId, status: merchant.verificationStatus, verifiedEmail: merchant.verifiedEmail || null, verifiedAt: merchant.verifiedAt || null, message: merchant.verificationMessage || '' } : null });
+    res.json({ status: true, connected: !!connection, email: connection?.email || null, lastCheckedAt: connection?.lastCheckedAt || null, upiVerification: merchant ? { upiId: merchant.upiId, status: merchant.verificationStatus, verifiedEmail: merchant.verifiedEmail || null, verifiedAt: merchant.verifiedAt || null, message: merchant.verificationMessage || '', provider: merchant.config?.adminPaymentProvider || 'UPI / Direct UPI', mobile: merchant.mobile || null } : null });
   } catch (error) { next(error); }
 });
 
