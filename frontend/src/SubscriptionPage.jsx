@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ArrowRight, CalendarDays, Check, CreditCard, Loader2, X } from 'lucide-react';
-import { getMySubscription, getSubscriptionOrder, getSubscriptionPlans, purchaseSubscription } from './api';
+import { ArrowRight, CalendarDays, Check, CreditCard, Loader2, X, ShieldCheck, Mail, ExternalLink } from 'lucide-react';
+import { getMySubscription, getSubscriptionOrder, getSubscriptionPlans, getSubscriptionVerification, getMerchants, verifyMerchant, purchaseSubscription } from './api';
 import './subscription.css';
 
 export default function SubscriptionPage() {
@@ -11,11 +11,25 @@ export default function SubscriptionPage() {
   const [order, setOrder] = useState(null);
   const [success, setSuccess] = useState(null);
   const [expired, setExpired] = useState(false);
+  const [verification, setVerification] = useState({ verified: false, merchant: null });
+  const [merchants, setMerchants] = useState([]);
+  const [verifyingMerchant, setVerifyingMerchant] = useState('');
   const pollRef = useRef(null);
   const expiryRef = useRef(null);
+  const verificationPollRef = useRef(null);
+
+  const refreshVerification = async () => {
+    try {
+      const [status, list] = await Promise.all([getSubscriptionVerification(), getMerchants()]);
+      setVerification(status);
+      setMerchants(list.merchants || []);
+      return status;
+    } catch (_) { return null; }
+  };
 
   useEffect(() => {
     getSubscriptionPlans().then(data => setPlans(data.plans || [])).catch(err => setError(err.message || 'Unable to load plans')).finally(() => setLoading(false));
+    if (localStorage.getItem('gateway_access_token')) refreshVerification();
 
     const checkSubscription = async () => {
       if (!localStorage.getItem('gateway_access_token')) return;
@@ -23,30 +37,49 @@ export default function SubscriptionPage() {
         const data = await getMySubscription();
         if (data.expired) {
           const key = `subscription-expired-${data.expiresAt || 'unknown'}`;
-          if (localStorage.getItem('subscription-expired-popup') !== key) {
-            localStorage.setItem('subscription-expired-popup', key);
-            setExpired(true);
-          }
+          if (localStorage.getItem('subscription-expired-popup') !== key) { localStorage.setItem('subscription-expired-popup', key); setExpired(true); }
         }
+        await refreshVerification();
       } catch (_) {}
     };
-
     checkSubscription();
     expiryRef.current = setInterval(checkSubscription, 60000);
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-      if (expiryRef.current) clearInterval(expiryRef.current);
-    };
+    return () => { if (pollRef.current) clearInterval(pollRef.current); if (expiryRef.current) clearInterval(expiryRef.current); if (verificationPollRef.current) clearInterval(verificationPollRef.current); };
   }, []);
+
+  const startVerificationPolling = () => {
+    if (verificationPollRef.current) clearInterval(verificationPollRef.current);
+    let checks = 0;
+    verificationPollRef.current = setInterval(async () => {
+      checks += 1;
+      const status = await refreshVerification();
+      if (status?.verified || checks >= 30) { clearInterval(verificationPollRef.current); verificationPollRef.current = null; setVerifyingMerchant(''); }
+    }, 4000);
+  };
+
+  const connectMerchantGmail = async (merchant) => {
+    if (!merchant?.upiId) { setError('First add the UPI ID for this merchant.'); return; }
+    setError(''); setVerifyingMerchant(String(merchant._id));
+    try {
+      const data = await verifyMerchant(merchant._id);
+      if (data.verified) { await refreshVerification(); setVerifyingMerchant(''); return; }
+      if (data.url) {
+        const popup = window.open(data.url, 'omniupi-gmail-verify', 'width=520,height=720,noopener,noreferrer');
+        if (!popup) window.location.href = data.url;
+        startVerificationPolling();
+      } else setVerifyingMerchant('');
+    } catch (err) { setError(err.message || 'Unable to start Google verification'); setVerifyingMerchant(''); }
+  };
 
   const buy = async (plan) => {
     if (!localStorage.getItem('gateway_access_token')) { window.location.href = '/#login'; return; }
+    const current = verification.verified ? verification : await refreshVerification();
+    if (!current?.verified) { setError('Google/Gmail verification is required before purchasing a subscription.'); return; }
     setBusy(plan._id); setError('');
     try {
       const data = await purchaseSubscription(plan._id);
-      setOrder(data.order);
-      startPaymentStatusPolling(data.order.orderId);
-    } catch (err) { setError(err.message || 'Unable to create payment'); } finally { setBusy(''); }
+      setOrder(data.order); startPaymentStatusPolling(data.order.orderId);
+    } catch (err) { setError(err.message || 'Unable to create payment'); if (err.code === 'MERCHANT_GMAIL_VERIFICATION_REQUIRED') await refreshVerification(); } finally { setBusy(''); }
   };
 
   const startPaymentStatusPolling = (orderId) => {
@@ -56,12 +89,8 @@ export default function SubscriptionPage() {
       checks += 1;
       try {
         const data = await getSubscriptionOrder(orderId);
-        if (data.order?.status === 'SUCCESS') {
-          clearInterval(pollRef.current); pollRef.current = null; setOrder(null);
-          setSuccess({ amount: data.order.amount, plan: data.order.plan, expiresAt: data.order.expiresAt });
-        } else if (data.order?.status === 'EXPIRED' || checks >= 60) {
-          clearInterval(pollRef.current); pollRef.current = null;
-        }
+        if (data.order?.status === 'SUCCESS') { clearInterval(pollRef.current); pollRef.current = null; setOrder(null); setSuccess({ amount: data.order.amount, plan: data.order.plan, expiresAt: data.order.expiresAt }); }
+        else if (data.order?.status === 'EXPIRED' || checks >= 60) { clearInterval(pollRef.current); pollRef.current = null; }
       } catch (_) {}
     }, 5000);
   };
@@ -74,12 +103,22 @@ export default function SubscriptionPage() {
       <main className="subscription-main">
         <div className="subscription-heading"><span className="subscription-eyebrow">SUBSCRIPTION</span><h1>Choose Your Plan</h1><p>Flexible plans for your business growth</p></div>
         {error && <div className="subscription-error">{error}</div>}
+
+        {!verification.verified && localStorage.getItem('gateway_access_token') && <section className="subscription-verification-card">
+          <div className="subscription-verification-icon"><ShieldCheck size={27}/></div>
+          <div className="subscription-verification-copy"><span className="subscription-eyebrow">REQUIRED BEFORE PAYMENT</span><h2>Verify your UPI account</h2><p>Connect the Google account/Gmail that receives payment notifications for your UPI ID. OmniUPI will use Gmail read-only access to confirm that the UPI ID belongs to the payment account.</p>
+            {merchants.length ? <div className="subscription-merchant-list">{merchants.map(m => <div className="subscription-merchant-row" key={m._id}><div><b>{m.name}</b><span>{m.upiId || 'UPI ID not added'}{m.verifiedEmail ? ` • ${m.verifiedEmail}` : ''}</span></div><button onClick={() => connectMerchantGmail(m)} disabled={!m.upiId || verifyingMerchant === String(m._id)}>{verifyingMerchant === String(m._id) ? <><Loader2 className="spin" size={16}/> Verifying…</> : <><Mail size={16}/> Verify with Google</>}</button></div>)}</div> : <div className="subscription-no-merchant"><p>Add your merchant/UPI ID first, then return here to verify it with Google.</p><a href="/#dashboard">Open Merchant Dashboard <ExternalLink size={15}/></a></div>}
+          </div>
+        </section>}
+
+        {verification.verified && <div className="subscription-verification-success"><ShieldCheck size={18}/><span><b>UPI Verified</b> — {verification.merchant?.upiId} • Google account {verification.merchant?.verifiedEmail}</span></div>}
+
         {loading ? <div className="subscription-loading"><Loader2 className="spin" /> Loading plans…</div> : <div className="subscription-grid">
           {plans.map((plan, index) => <article className={`subscription-card ${plan.popular || index === 1 ? 'featured' : ''}`} key={plan._id}>
             {plan.popular || index === 1 ? <div className="subscription-popular">Popular</div> : null}
             <div className="subscription-card-head"><div className="subscription-plan-icon"><CreditCard size={28} /></div><h2>{plan.name}</h2><div className="subscription-price">₹{Number(plan.price).toLocaleString('en-IN')}<small>/mo</small></div><div className="subscription-duration"><CalendarDays size={18} /> {durationLabel(plan.durationDays)}</div></div>
             <div className="subscription-features"><h3><Check size={18} /> Features</h3>{(plan.features || []).map((feature, i) => <div className="subscription-feature" key={`${feature}-${i}`}><Check size={18} /> <span>{feature}</span></div>)}</div>
-            <button className="subscription-buy" onClick={() => buy(plan)} disabled={busy === plan._id}>{busy === plan._id ? <><Loader2 className="spin" size={18}/> Creating Payment…</> : <>Get Started <ArrowRight size={19}/></>}</button>
+            <button className="subscription-buy" onClick={() => buy(plan)} disabled={!verification.verified || busy === plan._id}>{busy === plan._id ? <><Loader2 className="spin" size={18}/> Creating Payment…</> : verification.verified ? <>Get Started <ArrowRight size={19}/></> : <>Verify UPI First <ShieldCheck size={18}/></>}</button>
           </article>)}
         </div>}
         {!loading && !plans.length && !error && <div className="subscription-empty">No active subscription plans are available right now.</div>}
