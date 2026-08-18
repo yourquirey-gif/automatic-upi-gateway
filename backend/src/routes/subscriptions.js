@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import crypto from 'node:crypto';
+import QRCode from 'qrcode';
 import SubscriptionOrder from '../models/SubscriptionOrder.js';
 import Plan from '../models/Plan.js';
 import GatewaySettings from '../models/GatewaySettings.js';
@@ -20,9 +21,15 @@ router.get('/plans', async (_req, res, next) => {
 
 router.get('/verification', requireAuth, async (req, res, next) => {
   try {
-    const verified = await Merchant.findOne({ owner: req.auth.sub, verificationStatus: 'verified', status: 'active', upiId: { $exists: true, $nin: ['', null] } }).sort({ verifiedAt: -1 }).lean();
-    if (!verified) return res.json({ status: true, verified: false, merchant: null, message: 'Verify your UPI merchant account with the Google account/Gmail linked to that payment account before purchasing a subscription.' });
-    res.json({ status: true, verified: true, merchant: { id: verified._id, name: verified.name, upiId: verified.upiId, provider: verified.provider, verifiedEmail: verified.verifiedEmail, verifiedAt: verified.verifiedAt } });
+    if (req.auth?.role === 'admin') {
+      const adminMerchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement', verificationStatus: 'verified', status: 'active', upiId: { $exists: true, $nin: ['', null] } }).sort({ verifiedAt: -1 }).lean();
+      return res.json({ status: true, verified: !!adminMerchant, role: 'admin', merchant: adminMerchant ? { id: adminMerchant._id, name: adminMerchant.name, upiId: adminMerchant.upiId, provider: adminMerchant.provider, verifiedEmail: adminMerchant.verifiedEmail, verifiedAt: adminMerchant.verifiedAt } : null, message: adminMerchant ? 'Administrator payment UPI is verified and can receive subscription payments.' : 'Verify the administrator payment UPI before accepting subscription payments.' });
+    }
+    const settings = await GatewaySettings.findOne({ key: 'global' }).lean();
+    const verifiedAdminMerchant = await Merchant.findOne({ owner: { $in: await User.find({ role: 'admin', status: 'active' }).distinct('_id') }, provider: 'admin_settlement', verificationStatus: 'verified', status: 'active', upiId: { $exists: true, $nin: ['', null] } }).sort({ verifiedAt: -1 }).lean();
+    const upiId = verifiedAdminMerchant?.upiId || settings?.subscriptionUpiId || '';
+    if (!upiId) return res.json({ status: true, verified: false, merchant: null, message: 'Administrator payment UPI is not configured or verified yet.' });
+    return res.json({ status: true, verified: !!verifiedAdminMerchant, merchant: { id: verifiedAdminMerchant?._id || null, name: verifiedAdminMerchant?.name || settings?.subscriptionUpiName || 'OmniUPI', upiId, provider: verifiedAdminMerchant?.provider || 'admin_settlement', verifiedEmail: verifiedAdminMerchant?.verifiedEmail || null, verifiedAt: verifiedAdminMerchant?.verifiedAt || null }, message: verifiedAdminMerchant ? 'Administrator payment UPI is verified.' : 'Subscription UPI exists but administrator verification is still required.' });
   } catch (error) { next(error); }
 });
 
@@ -35,19 +42,21 @@ router.post('/purchase', requireAuth, requireKycIfEnabled, async (req, res, next
   try {
     if (req.auth?.role === 'admin') return res.status(403).json({ status: false, message: 'Administrators have permanent free access and do not need a subscription.' });
 
-    const verifiedMerchant = await Merchant.findOne({ owner: req.auth.sub, verificationStatus: 'verified', status: 'active', upiId: { $exists: true, $nin: ['', null] } }).sort({ verifiedAt: -1 });
-    if (!verifiedMerchant) return res.status(403).json({ status: false, code: 'MERCHANT_GMAIL_VERIFICATION_REQUIRED', message: 'Verify your UPI merchant account with the Google account/Gmail linked to that payment account before purchasing a subscription.' });
+    const adminIds = await User.find({ role: 'admin', status: 'active' }).distinct('_id');
+    const adminMerchant = await Merchant.findOne({ owner: { $in: adminIds }, provider: 'admin_settlement', verificationStatus: 'verified', status: 'active', upiId: { $exists: true, $nin: ['', null] } }).sort({ verifiedAt: -1 }).lean();
+    if (!adminMerchant) return res.status(503).json({ status: false, code: 'ADMIN_PAYMENT_UPI_NOT_VERIFIED', message: 'Subscription payment is temporarily unavailable. Administrator must first verify the payment UPI with Google/Gmail.' });
 
     const plan = await Plan.findOne({ _id: req.body.planId, active: true });
     if (!plan) return res.status(404).json({ status: false, message: 'Plan not found or inactive' });
     const settings = await GatewaySettings.findOne({ key: 'global' });
-    if (!settings?.subscriptionUpiId) return res.status(503).json({ status: false, message: 'Subscription UPI ID is not configured by administrator' });
-
+    const upiId = adminMerchant.upiId;
+    const upiName = adminMerchant.name || settings?.subscriptionUpiName || 'OmniUPI';
     const orderId = `AGP${Date.now()}${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const amount = Number(plan.price);
-    const paymentUrl = buildDynamicUpiUrl({ upiId: settings.subscriptionUpiId, payeeName: settings.subscriptionUpiName, amount, orderId, planName: plan.name });
+    const paymentUrl = buildDynamicUpiUrl({ upiId, payeeName: upiName, amount, orderId, planName: plan.name });
+    const qrDataUrl = await QRCode.toDataURL(paymentUrl, { width: 320, margin: 2, errorCorrectionLevel: 'M' });
     const order = await SubscriptionOrder.create({ user: req.auth.sub, plan: plan._id, orderId, amount, paymentUrl });
-    res.status(201).json({ status: true, order: { id: order._id, orderId, amount: order.amount, paymentUrl, upiId: settings.subscriptionUpiId, upiName: settings.subscriptionUpiName || 'OmniUPI', plan: plan.name, durationDays: plan.durationDays, status: order.status } });
+    res.status(201).json({ status: true, order: { id: order._id, orderId, amount: order.amount, paymentUrl, qrDataUrl, upiId, upiName, plan: plan.name, durationDays: plan.durationDays, status: order.status } });
   } catch (error) { next(error); }
 });
 
@@ -55,14 +64,10 @@ router.get('/order/:orderId', requireAuth, async (req, res, next) => {
   try {
     let order = await SubscriptionOrder.findOne({ orderId: req.params.orderId, user: req.auth.sub }).populate('plan');
     if (!order) return res.status(404).json({ status: false, message: 'Subscription order not found' });
-
-    // The frontend polls this endpoint while the user is paying. We verify the admin's
-    // connected Gmail here so a successful UPI credit activates the plan automatically.
     if (order.status === 'PENDING') {
       await verifySubscriptionOrderForAdmin(order.orderId);
       order = await SubscriptionOrder.findOne({ orderId: req.params.orderId, user: req.auth.sub }).populate('plan');
     }
-
     const user = await User.findById(req.auth.sub).populate('plan');
     res.json({ status: true, order: { orderId: order.orderId, amount: order.amount, plan: order.plan?.name || '', status: order.status, paidAt: order.paidAt || null, expiresAt: order.planExpiresAt || user?.planExpiresAt || null, utr: order.utr || null } });
   } catch (error) { next(error); }
