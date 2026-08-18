@@ -31,6 +31,7 @@
       .hero-section:before{content:"";position:absolute;z-index:1;right:4%;top:50%;width:min(44vw,570px);aspect-ratio:800/495;transform:translateY(-43%) rotate(2deg);background:url('/hero-card.svg') center/contain no-repeat;pointer-events:none}
       .hero-copy{z-index:2}
       .google-purpose{max-width:1180px;margin:0 auto 70px;padding:34px 38px;border:1px solid #e6e9f2;border-radius:24px;background:#fff;box-shadow:0 16px 40px #1720330b;color:#172033}
+      .google-purpose h1{margin:0 0 12px;font-size:32px;letter-spacing:-.8px;font-weight:900}
       .google-purpose h2{margin:0 0 12px;font-size:28px;letter-spacing:-.7px;font-weight:900}
       .google-purpose p{margin:8px 0;color:#687386;font-size:16px;line-height:1.75}
       .google-purpose strong{color:#303a4d}
@@ -46,14 +47,14 @@
         .gradient-btn,.light-btn{width:100%!important;min-height:58px!important;padding:15px 20px!important}
         .metrics{display:grid!important;grid-template-columns:repeat(3,1fr)!important;gap:8px!important;margin-top:34px!important;padding:0 2px!important;position:relative!important;z-index:4!important}
         .metrics div{min-width:0!important;text-align:center!important}.metrics strong{font-size:clamp(27px,8vw,36px)!important;line-height:1!important}.metrics span{font-size:10px!important;letter-spacing:.08em!important;white-space:nowrap!important}
-        .google-purpose{margin:0 18px 42px;padding:25px 22px;border-radius:20px}.google-purpose h2{font-size:23px}.google-purpose p{font-size:14px}
+        .google-purpose{margin:0 18px 42px;padding:25px 22px;border-radius:20px}.google-purpose h1{font-size:27px}.google-purpose h2{font-size:23px}.google-purpose p{font-size:14px}
       }
       @media(max-width:430px){.hero-section{padding:48px 15px 28px!important}.hero-section:before{width:100%!important;max-width:390px!important;margin-top:48px!important}.metrics{gap:4px!important}.metrics strong{font-size:28px!important}.metrics span{font-size:9px!important}}
     </style>
   </head>
   <body>
     <section class="google-purpose" aria-label="OmniUPI application information">
-      <h2>OmniUPI</h2>
+      <h1>OmniUPI</h1>
       <p><strong>OmniUPI is a UPI payment gateway and payment infrastructure platform for businesses.</strong> Merchants use OmniUPI to connect UPI payment accounts, create payment links, accept customer payments and manage transaction activity through merchant tools and analytics.</p>
       <p>OmniUPI uses Google Sign-In to authenticate merchant accounts. Google account information requested during sign-in is used to authenticate and create or access the merchant account. <a href="#privacy">Privacy Policy</a></p>
     </section>
@@ -65,6 +66,6 @@
       document.addEventListener('click',async function(e){const button=e.target.closest&&e.target.closest('.google-btn');if(!button)return;e.preventDefault();e.stopImmediatePropagation();const base=(window.__OMNIUPI_API_BASE__||'https://api.omniupi.in/api/v1').replace(/\/$/,'');try{const r=await fetch(base+'/auth/google/config',{cache:'no-store'});const d=await r.json();if(!r.ok||!d.enabled)throw new Error('Google sign-up is currently disabled by the administrator.');location.href=base+'/auth/google';}catch(err){const box=document.querySelector('.auth-error');if(box)box.textContent=err.message;else alert(err.message);}},true);
       const addLegalLinks=()=>{const footer=document.querySelector('.footer');if(!footer)return;if(!footer.querySelector('.footer-legal-links')){const wrap=document.createElement('div');wrap.className='footer-legal-links';wrap.innerHTML='<div class="footer-legal-title">Legal & Support</div><a href="#privacy">Privacy Policy</a><a href="#terms">Terms & Conditions</a><a href="#refund">Refund & Cancellation</a><a href="#shipping">Shipping & Delivery</a><a href="#contact">Contact Us</a>';footer.insertBefore(wrap,footer.querySelector('.copyright'));}};new MutationObserver(addLegalLinks).observe(document.getElementById('root'),{childList:true,subtree:true});addLegalLinks();
     </script>
-    <script type="module" src="/src/main.jsx?v=20260818-5"></script>
+    <script type="module" src="/src/main.jsx?v=20260818-6"></script>
   </body>
 </html>
