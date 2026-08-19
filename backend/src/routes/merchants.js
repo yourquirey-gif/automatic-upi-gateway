@@ -4,9 +4,10 @@ import Merchant from '../models/Merchant.js';
 import GmailConnection from '../models/GmailConnection.js';
 import GatewaySettings from '../models/GatewaySettings.js';
 import User from '../models/User.js';
+import Order from '../models/Order.js';
 import { requireAuth } from '../middleware/auth.js';
 import { requireKycIfEnabled } from '../middleware/kyc.js';
-import { createGoogleClient } from '../services/gmailPaymentVerifier.js';
+import { createGoogleClient, createVerificationOrder, verifyMerchantVerificationPayment } from '../services/gmailPaymentVerifier.js';
 
 const router = Router();
 router.use(requireAuth, requireKycIfEnabled);
@@ -25,8 +26,6 @@ async function isAdminUser(userId) {
 
 router.get('/', async (req, res, next) => {
   try {
-    // Admin Settlement is a private admin-only merchant and must never leak into
-    // the normal merchant list even if old data was created incorrectly.
     const merchants = await Merchant.find({ owner: req.auth.sub, provider: { $ne: 'admin_settlement' } }).sort({ createdAt: -1 });
     res.json({ status: true, merchants });
   } catch (error) { next(error); }
@@ -36,20 +35,11 @@ router.post('/', async (req, res, next) => {
   try {
     const { name, provider, upiId, mobile, externalMerchantId, config } = req.body;
     if (!name || !provider) return res.status(400).json({ status: false, message: 'name and provider are required' });
-
     const admin = await isAdminUser(req.auth.sub);
     const normalizedUpi = normalizeUpi(upiId);
     const adminUpi = await adminSettlementUpi();
-
-    // Admin Settlement UPI belongs exclusively to the administrator. A normal
-    // merchant can never register, verify, or receive payments on that UPI.
-    if (!admin && String(provider).trim() === 'admin_settlement') {
-      return res.status(403).json({ status: false, message: 'Admin Settlement UPI is reserved for the administrator.' });
-    }
-    if (!admin && normalizedUpi && adminUpi && normalizedUpi === adminUpi) {
-      return res.status(403).json({ status: false, message: 'This UPI ID is reserved for the administrator. Enter your own merchant UPI ID.' });
-    }
-
+    if (!admin && String(provider).trim() === 'admin_settlement') return res.status(403).json({ status: false, message: 'Admin Settlement UPI is reserved for the administrator.' });
+    if (!admin && normalizedUpi && adminUpi && normalizedUpi === adminUpi) return res.status(403).json({ status: false, message: 'This UPI ID is reserved for the administrator. Enter your own merchant UPI ID.' });
     const merchant = await Merchant.create({
       owner: req.auth.sub,
       name,
@@ -60,9 +50,9 @@ router.post('/', async (req, res, next) => {
       config,
       status: 'pending',
       verificationStatus: 'pending',
-      verificationMessage: 'Please use the Gmail account linked with this merchant/payment account.'
+      verificationMessage: 'Please connect the Gmail account that receives payment notifications for this merchant.'
     });
-    res.status(201).json({ status: true, message: 'Merchant added. Verification is required before it can receive live payments.', merchant });
+    res.status(201).json({ status: true, message: 'Merchant added. A controlled verification payment is required before it can receive live payments.', merchant });
   } catch (error) { next(error); }
 });
 
@@ -73,9 +63,7 @@ router.delete('/:merchantId', async (req, res, next) => {
     const wasAdminSettlement = merchant.provider === 'admin_settlement';
     await GmailConnection.deleteOne({ merchant: merchant._id });
     await merchant.deleteOne();
-    if (wasAdminSettlement) {
-      await GatewaySettings.findOneAndUpdate({ key: 'global' }, { $unset: { subscriptionUpiId: 1, subscriptionUpiName: 1, settlementUpiId: 1, settlementName: 1, settlementProvider: 1, settlementMobile: 1 } });
-    }
+    if (wasAdminSettlement) await GatewaySettings.findOneAndUpdate({ key: 'global' }, { $unset: { subscriptionUpiId: 1, subscriptionUpiName: 1, settlementUpiId: 1, settlementName: 1, settlementProvider: 1, settlementMobile: 1 } });
     res.json({ status: true, message: wasAdminSettlement ? 'Admin payment UPI and its Gmail verification connection were removed.' : 'UPI ID removed successfully.' });
   } catch (error) { next(error); }
 });
@@ -106,23 +94,35 @@ router.post('/:merchantId/verify', async (req, res, next) => {
     }
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Add the merchant UPI ID before verification.' });
     if (merchant.verificationStatus === 'verified') return res.json({ status: true, verified: true, merchant });
+    const verificationOrder = await createVerificationOrder(merchant);
     const client = await createGoogleClient('gmail');
     const returnUrl = safeReturnUrl(req.body?.returnUrl || req.query?.returnUrl);
     const state = jwt.sign({ sub: req.auth.sub, merchantId: String(merchant._id), purpose: 'merchant-gmail-verify', returnUrl }, process.env.JWT_SECRET, { expiresIn: '10m' });
     const url = client.generateAuthUrl({ access_type: 'offline', prompt: 'consent', state, scope: ['openid', 'email', 'https://www.googleapis.com/auth/gmail.readonly'] });
     merchant.verificationStatus = 'verifying';
-    merchant.verificationMessage = 'Please use the Gmail account linked with this merchant/payment account.';
+    merchant.verificationMessage = `Connect Gmail, then pay ₹1 using this verification order: ${verificationOrder.orderId}`;
     await merchant.save();
-    res.json({ status: true, verified: false, url, message: merchant.verificationMessage });
+    res.json({ status: true, verified: false, url, message: merchant.verificationMessage, verificationOrder });
   } catch (error) { next(error); }
 });
 
 router.get('/:merchantId/verification', async (req, res, next) => {
   try {
-    const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }).lean();
+    let merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
     if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
-    const gmail = await GmailConnection.findOne({ merchant: merchant._id, active: true }).lean();
-    res.json({ status: true, verificationStatus: merchant.verificationStatus, merchantStatus: merchant.status, verifiedAt: merchant.verifiedAt, verifiedEmail: merchant.verifiedEmail, message: merchant.verificationMessage, gmail: gmail ? { email: gmail.email, connected: true, lastCheckedAt: gmail.lastCheckedAt } : { connected: false } });
+    const gmail = await GmailConnection.findOne({ merchant: merchant._id, active: true }).select('+refreshTokenEncrypted').lean();
+    if (String(req.query.check || '') === '1' && gmail && merchant.verificationStatus !== 'verified') {
+      const liveMerchant = await Merchant.findById(merchant._id);
+      const liveConnection = await GmailConnection.findOne({ merchant: merchant._id, active: true }).select('+refreshTokenEncrypted');
+      if (liveMerchant && liveConnection) {
+        await verifyMerchantVerificationPayment({ merchant: liveMerchant, connection: liveConnection });
+        merchant = await Merchant.findById(merchant._id);
+      }
+    }
+    const verificationOrder = merchant.config?.verificationOrderId
+      ? await Order.findOne({ merchant: merchant._id, owner: req.auth.sub, orderId: String(merchant.config.verificationOrderId) }).select('orderId amount status paymentUrl expiresAt paidAt utr').lean()
+      : null;
+    res.json({ status: true, verificationStatus: merchant.verificationStatus, merchantStatus: merchant.status, verifiedAt: merchant.verifiedAt, verifiedEmail: merchant.verifiedEmail, message: merchant.verificationMessage, gmail: gmail ? { email: gmail.email, connected: true, lastCheckedAt: gmail.lastCheckedAt } : { connected: false }, verificationOrder });
   } catch (error) { next(error); }
 });
 
