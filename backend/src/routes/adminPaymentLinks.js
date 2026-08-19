@@ -8,9 +8,11 @@ import { requireAuth, requireAdmin } from '../middleware/auth.js';
 const router = Router();
 router.use(requireAuth, requireAdmin);
 const SITE = 'https://omniupi.in';
+const PAYMENT_PAGE = `${SITE}/pay.html`;
 const TTL_MS = 5 * 60 * 1000;
 const clean = (v, max = 300) => String(v ?? '').trim().slice(0, max);
 const orderId = () => `${Date.now()}${crypto.randomBytes(4).toString('hex')}`.slice(0, 24);
+const paymentUrlFor = id => `${PAYMENT_PAGE}?order_id=${encodeURIComponent(id)}`;
 
 router.get('/', async (req, res, next) => {
   try {
@@ -18,7 +20,7 @@ router.get('/', async (req, res, next) => {
     const orders = await Order.find({ owner: req.auth.sub })
       .populate('merchant', 'name upiId provider status verificationStatus')
       .sort({ createdAt: -1 }).limit(limit).lean();
-    res.json({ status: true, links: orders.map(o => ({ ...o, paymentUrl: o.paymentUrl || `${SITE}/pay?order_id=${encodeURIComponent(o.orderId)}` })) });
+    res.json({ status: true, links: orders.map(o => ({ ...o, paymentUrl: paymentUrlFor(o.orderId) })) });
   } catch (e) { next(e); }
 });
 
@@ -50,7 +52,7 @@ router.post('/', async (req, res, next) => {
       status: 'PENDING',
       feePercent: Number(merchant.planTransactionFeePercent || 0),
       netAmount: amountFixed,
-      paymentUrl: `${SITE}/pay?order_id=${encodeURIComponent(id)}`,
+      paymentUrl: paymentUrlFor(id),
       expiresAt
     });
     res.status(201).json({ status: true, message: 'Payment link created.', result: { orderId: order.orderId, amount: order.amount.toFixed(2), paymentUrl: order.paymentUrl, expiresAt: order.expiresAt, expiresInSeconds: 300, merchant: { name: merchant.name, upiId: merchant.upiId } } });
