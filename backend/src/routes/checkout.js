@@ -2,9 +2,11 @@ import { Router } from 'express';
 import QRCode from 'qrcode';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
+import GatewaySettings from '../models/GatewaySettings.js';
 
 const router = Router();
 function clean(v, max = 300) { return String(v ?? '').trim().slice(0, max); }
+function normalizeUpi(v) { return String(v || '').trim().toLowerCase(); }
 function upiUrl(order, merchant) { return `upi://pay?${new URLSearchParams({ pa: clean(merchant.upiId, 200), pn: clean(merchant.name || merchant.provider || 'Merchant', 80), am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn: clean(order.remark1 || `Payment ${order.orderId}`, 80) }).toString()}`; }
 
 router.get('/:orderId', async (req, res, next) => {
@@ -17,6 +19,17 @@ router.get('/:orderId', async (req, res, next) => {
     }
     const merchant = order.merchant;
     if (!merchant || merchant.status !== 'active' || merchant.verificationStatus !== 'verified') return res.status(409).json({ status: false, message: 'Payment account is not verified and active' });
+
+    // A normal merchant checkout must never use the Admin Settlement UPI.
+    // Admin payment links use provider=admin_settlement and are handled separately.
+    if (merchant.provider !== 'admin_settlement') {
+      const settings = await GatewaySettings.findOne({ key: 'global' }).select('settlementUpiId').lean();
+      const adminUpi = normalizeUpi(settings?.settlementUpiId);
+      if (adminUpi && normalizeUpi(merchant.upiId) === adminUpi) {
+        return res.status(409).json({ status: false, message: 'This payment account is reserved for the administrator. Merchant checkout is disabled until the merchant adds and verifies their own UPI ID.' });
+      }
+    }
+
     const c = merchant.config?.checkout || {};
     const paymentUpiUrl = upiUrl(order, merchant);
     const qrDataUrl = await QRCode.toDataURL(paymentUpiUrl, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
