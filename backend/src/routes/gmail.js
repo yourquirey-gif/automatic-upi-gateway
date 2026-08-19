@@ -5,7 +5,7 @@ import Order from '../models/Order.js';
 import GatewaySettings from '../models/GatewaySettings.js';
 import User from '../models/User.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { connectMerchantGmail, createVerificationOrder, testGmailAppPassword, verifyMerchantVerificationPayment, verifyPendingOrdersForAdmin } from '../services/gmailImapPaymentVerifier.js';
+import { connectMerchantGmail, createVerificationOrder, testGmailAppPassword, checkStoredGmailConnection, verifyMerchantVerificationPayment, verifyPendingOrdersForAdmin } from '../services/gmailImapPaymentVerifier.js';
 
 const router = Router();
 const safeEmail = v => String(v || '').trim().toLowerCase();
@@ -30,6 +30,24 @@ router.post('/connect-admin', requireAuth, requireAdmin, async (req, res, next) 
   const result = await connectMerchantGmail({ merchant, email: req.body.email, appPassword: req.body.appPassword });
   res.json({ status: true, ...result, merchantId: merchant._id });
 } catch (e) { next(e); } });
+
+router.post('/check-connection/:merchantId', requireAuth, async (req, res, next) => { try {
+  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
+  if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+  const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
+  if (!connection) return res.status(400).json({ status: false, connected: false, message: 'Gmail App Password is not connected.' });
+  const result = await checkStoredGmailConnection(connection);
+  connection.lastCheckedAt = result.checkedAt; await connection.save();
+  res.json({ status: true, ...result, message: 'Gmail is connected and accessible.' });
+} catch (e) { res.status(400).json({ status: false, connected: false, message: e.message || 'Gmail connection check failed' }); } });
+
+router.post('/check-connection-admin', requireAuth, requireAdmin, async (req, res, next) => { try {
+  const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
+  if (!connection) return res.status(400).json({ status: false, connected: false, message: 'Admin Gmail App Password is not connected.' });
+  const result = await checkStoredGmailConnection(connection);
+  connection.lastCheckedAt = result.checkedAt; await connection.save();
+  res.json({ status: true, ...result, message: 'Admin Gmail is connected and accessible.' });
+} catch (e) { res.status(400).json({ status: false, connected: false, message: e.message || 'Admin Gmail connection check failed' }); } });
 
 router.post('/check/:merchantId', requireAuth, async (req, res, next) => { try {
   const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
