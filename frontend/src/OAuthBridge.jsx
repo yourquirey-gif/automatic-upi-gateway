@@ -2,15 +2,109 @@ import { useEffect } from 'react';
 
 const API_BASE = String(import.meta.env.VITE_API_BASE_URL || 'https://api.omniupi.in/api/v1').replace(/\/$/, '');
 
-function updateLocalMerchantVerification() {
-  const upi = localStorage.getItem('omniupi_oauth_pending_upi');
-  if (!upi) return;
+function readMerchants() {
   try {
-    const merchants = JSON.parse(localStorage.getItem('seox_merchants') || '[]');
-    const updated = merchants.map(m => String(m.upiId || '').trim().toLowerCase() === upi.toLowerCase() ? { ...m, verified: true } : m);
-    localStorage.setItem('seox_merchants', JSON.stringify(updated));
-  } catch {}
+    const value = JSON.parse(localStorage.getItem('seox_merchants') || '[]');
+    return Array.isArray(value) ? value : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMerchants(merchants) {
+  localStorage.setItem('seox_merchants', JSON.stringify(merchants));
+}
+
+function normalizeUpi(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function updateLocalMerchantVerification({ upi, merchantId, verified, email }) {
+  const pending = normalizeUpi(upi || localStorage.getItem('omniupi_oauth_pending_upi') || '');
+  if (!pending && !merchantId) return;
+
+  const merchants = readMerchants();
+  const updated = merchants.map((merchant) => {
+    const sameUpi = pending && normalizeUpi(merchant.upiId) === pending;
+    const sameId = merchantId && String(merchant.backendId || merchant.merchantId || '') === String(merchantId);
+    if (!sameUpi && !sameId) return merchant;
+
+    if (verified) {
+      return {
+        ...merchant,
+        verified: true,
+        verificationStatus: 'verified',
+        status: 'active',
+        verifiedAt: Date.now(),
+        ...(email ? { verifiedEmail: email } : {})
+      };
+    }
+
+    return {
+      ...merchant,
+      verified: false,
+      verificationStatus: 'failed',
+      status: 'pending'
+    };
+  });
+
+  writeMerchants(updated);
   localStorage.removeItem('omniupi_oauth_pending_upi');
+}
+
+function decorateMerchantTable() {
+  const table = document.querySelector('.merchants-card .merchant-table-wrap table');
+  if (!table) return;
+
+  const rows = [...table.querySelectorAll('tbody tr')];
+  if (!rows.length || rows[0].querySelector('.table-empty')) return;
+
+  const merchants = readMerchants();
+  rows.forEach((row, index) => {
+    const merchant = merchants[index];
+    if (!merchant) return;
+
+    const cells = row.querySelectorAll('td');
+    if (cells.length < 6) return;
+
+    const statusCell = cells[4];
+    const actionCell = cells[5];
+    const verified = merchant.verified === true || merchant.verificationStatus === 'verified' || merchant.status === 'active';
+
+    statusCell.innerHTML = verified
+      ? '<span class="status-ok">Active</span>'
+      : '<span class="status-pending">Inactive</span>';
+
+    let verifyButton = actionCell.querySelector('.verify-btn');
+    if (verifyButton) {
+      verifyButton.innerHTML = verified
+        ? '<span style="display:inline-flex;align-items:center;gap:5px">✓ Verified</span>'
+        : '<span style="display:inline-flex;align-items:center;gap:5px">✓ Verify</span>';
+      verifyButton.disabled = false;
+      verifyButton.title = verified ? 'UPI verified' : 'Verify UPI ID with Google Gmail';
+    }
+
+    let deleteButton = actionCell.querySelector('.merchant-delete-btn');
+    if (!deleteButton) {
+      deleteButton = document.createElement('button');
+      deleteButton.type = 'button';
+      deleteButton.className = 'merchant-delete-btn';
+      deleteButton.textContent = 'Delete';
+      deleteButton.style.cssText = 'margin-left:7px;border:1px solid #f0caca;background:#fff5f5;color:#d64545;border-radius:9px;padding:8px 11px;font-weight:750;cursor:pointer;';
+      deleteButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const current = readMerchants();
+        const target = current[index];
+        if (!target) return;
+        const name = target.label || target.upiId || target.mobile || 'this merchant';
+        if (!window.confirm(`Delete ${name}? This will remove the merchant from this dashboard.`)) return;
+        writeMerchants(current.filter((_, i) => i !== index));
+        window.location.reload();
+      });
+      actionCell.appendChild(deleteButton);
+    }
+  });
 }
 
 export default function OAuthBridge() {
@@ -18,17 +112,33 @@ export default function OAuthBridge() {
     const handleOAuthCallback = () => {
       const raw = window.location.hash.replace(/^#/, '');
       if (!raw.startsWith('google_token=')) return false;
+
       const params = new URLSearchParams(raw);
       const token = params.get('google_token');
       if (!token) return false;
+
       localStorage.setItem('gateway_access_token', token);
-      if (params.get('merchant_verified') === '1') updateLocalMerchantVerification();
-      else localStorage.removeItem('omniupi_oauth_pending_upi');
-      window.location.hash = params.get('merchant_id') ? 'dashboard/connect' : 'dashboard';
+      const verified = params.get('merchant_verified') === '1';
+      const merchantId = params.get('merchant_id') || '';
+      const pendingUpi = localStorage.getItem('omniupi_oauth_pending_upi') || '';
+
+      updateLocalMerchantVerification({
+        upi: pendingUpi,
+        merchantId,
+        verified,
+        email: params.get('verified_email') || ''
+      });
+
+      if (!verified) {
+        localStorage.removeItem('omniupi_oauth_pending_upi');
+      }
+
+      window.location.hash = merchantId ? 'dashboard/connect' : 'dashboard';
+      setTimeout(decorateMerchantTable, 100);
       return true;
     };
 
-    const handleClick = event => {
+    const handleClick = (event) => {
       const googleLoginButton = event.target.closest?.('.google-btn');
       if (googleLoginButton) {
         event.preventDefault();
@@ -40,30 +150,39 @@ export default function OAuthBridge() {
 
       const gmailButton = event.target.closest?.('.google-connect');
       if (!gmailButton) return;
+
       event.preventDefault();
       event.stopPropagation();
-      const upi = gmailButton.closest('.verify-modal')?.querySelector('.saved-upi b')?.textContent?.trim() || '';
+
+      const modal = gmailButton.closest('.verify-modal');
+      const upi = modal?.querySelector('.saved-upi b')?.textContent?.trim() || '';
       if (!upi) {
         window.alert('UPI ID is missing. Please enter and save the merchant UPI ID first.');
         return;
       }
-      let mobile = '';
-      try {
-        const merchants = JSON.parse(localStorage.getItem('seox_merchants') || '[]');
-        const merchant = merchants.find(m => String(m.upiId || '').trim().toLowerCase() === upi.toLowerCase());
-        mobile = String(merchant?.mobile || '').replace(/\D/g, '');
-      } catch {}
+
+      const merchants = readMerchants();
+      const merchant = merchants.find((item) => normalizeUpi(item.upiId) === normalizeUpi(upi));
+      const mobile = String(merchant?.mobile || '').replace(/\D/g, '');
       if (!/^\d{10}$/.test(mobile)) {
         window.alert('A valid 10-digit merchant mobile number is required.');
         return;
       }
-      localStorage.setItem('omniupi_oauth_pending_upi', upi.toLowerCase());
+
+      localStorage.setItem('omniupi_oauth_pending_upi', normalizeUpi(upi));
       window.location.href = `${API_BASE}/auth/google/merchant?upi=${encodeURIComponent(upi)}&mobile=${encodeURIComponent(mobile)}`;
     };
 
     if (!handleOAuthCallback()) window.addEventListener('hashchange', handleOAuthCallback);
     document.addEventListener('click', handleClick, true);
+
+    const observer = new MutationObserver(() => decorateMerchantTable());
+    observer.observe(document.body, { childList: true, subtree: true });
+    const timer = setTimeout(decorateMerchantTable, 250);
+
     return () => {
+      clearTimeout(timer);
+      observer.disconnect();
       window.removeEventListener('hashchange', handleOAuthCallback);
       document.removeEventListener('click', handleClick, true);
     };
