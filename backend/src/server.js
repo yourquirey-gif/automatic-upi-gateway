@@ -25,94 +25,19 @@ import PaymentReceipt from './models/PaymentReceipt.js';
 import GatewaySettings from './models/GatewaySettings.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import Blog from './models/Blog.js';
-import { verifyAllConnectedGmails } from './services/gmailPaymentVerifier.js';
+import { verifyAllConnectedGmails } from './services/gmailImapPaymentVerifier.js';
 
-const app = express();
-const port = Number(process.env.PORT || 5000);
-app.set('trust proxy', 1);
-app.use(helmet());
-app.use(cors({ origin: true, credentials: true }));
-app.use(express.json({ limit: '15mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
-app.get('/health', (_req, res) => res.json({ ok: true, service: 'omniupi-api', brand: 'OmniUPI', website: 'https://omniupi.in', api: 'https://api.omniupi.in' }));
-app.get('/api/v1', (_req, res) => res.json({ name: 'OmniUPI API', brand: 'OmniUPI', version: 'v1', website: 'https://omniupi.in', docs: 'https://omniupi.in/docs' }));
-
-const xmlEscape = value => String(value || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\"/g, '&quot;').replace(/'/g, '&apos;');
-const sitemapHeaders = res => res.type('application/xml').set('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0').set('CDN-Cache-Control', 'no-store').set('Vercel-CDN-Cache-Control', 'no-store');
-const staticPages = [['https://omniupi.in/', 'daily', '1.0'], ['https://omniupi.in/blog', 'daily', '0.8'], ['https://omniupi.in/privacy.html', 'monthly', '0.5'], ['https://omniupi.in/terms.html', 'monthly', '0.5'], ['https://omniupi.in/refund.html', 'monthly', '0.4'], ['https://omniupi.in/shipping.html', 'monthly', '0.4'], ['https://omniupi.in/contact.html', 'monthly', '0.5']];
-const urlset = urls => '<?xml version="1.0" encoding="UTF-8"?>' + '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + urls.map(({ loc, changefreq, priority, lastmod }) => `<url><loc>${xmlEscape(loc)}</loc>${lastmod ? `<lastmod>${new Date(lastmod).toISOString()}</lastmod>` : ''}<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`).join('') + '</urlset>';
-app.get('/sitemap.xml', (_req, res) => { const xml = '<?xml version="1.0" encoding="UTF-8"?>' + '<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' + '<sitemap><loc>https://omniupi.in/sitemap-pages.xml</loc></sitemap>' + '<sitemap><loc>https://omniupi.in/sitemap-blog.xml</loc></sitemap>' + '</sitemapindex>'; sitemapHeaders(res).send(xml); });
-app.get('/sitemap-pages.xml', (_req, res) => { const xml = urlset(staticPages.map(([loc, changefreq, priority]) => ({ loc, changefreq, priority }))); sitemapHeaders(res).send(xml); });
-app.get('/sitemap-blog.xml', async (_req, res) => { try { const blogs = await Blog.find({ status: 'PUBLISHED', publishedAt: { $lte: new Date() } }).select('slug publishedAt updatedAt createdAt').sort({ publishedAt: -1, createdAt: -1 }).lean(); const urls = blogs.map(b => ({ loc: `https://omniupi.in/blog/${encodeURIComponent(b.slug)}`, changefreq: 'weekly', priority: '0.7', lastmod: b.updatedAt || b.publishedAt || b.createdAt })); sitemapHeaders(res).send(urlset(urls)); } catch (e) { console.error('Blog sitemap error:', e); sitemapHeaders(res).status(500).send(urlset([])); } });
-app.get('/robots.txt', (_req, res) => { res.type('text/plain').set('Cache-Control', 'public, max-age=300').send('User-agent: *\nAllow: /\nDisallow: /dashboard\nDisallow: /admin\nSitemap: https://omniupi.in/sitemap.xml\n'); });
-
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/merchants', merchantRoutes);
-app.use('/api/v1/admin', adminRoutes);
-app.use('/api/v1/admin/payment-links', adminPaymentLinksRoutes);
-app.use('/api/v1/admin/blogs', adminBlogRoutes);
-app.use('/api/v1/v1/admin/blogs', adminBlogRoutes);
-app.use('/api/v1/gmail', gmailRoutes);
-app.use('/api/v1/subscriptions', subscriptionRoutes);
-app.use('/api/v1/account', accountRoutes);
-app.use('/api/v1/orders', ordersRoutes);
-app.use('/api/v1/kyc', kycRoutes);
-app.use('/api/v1/kyc-config', kycConfigRoutes);
-app.use('/api/v1/videos', videoRoutes);
-app.use('/api/v1/support', supportRoutes);
-app.use('/api/v1/public-checkout', checkoutRoutes);
-app.use('/api/v1/blogs', blogRoutes);
-app.use('/api', publicApiRoutes);
-app.use((err, _req, res, _next) => { console.error(err); res.status(500).json({ status: false, message: 'Internal server error' }); });
-
-async function ensureBootstrapAdmin() {
-  const email = String(process.env.ADMIN_EMAIL || '').trim().toLowerCase(), password = String(process.env.ADMIN_PASSWORD || '');
-  if (!email || !password) { console.log('Admin bootstrap skipped: ADMIN_EMAIL/ADMIN_PASSWORD not configured.'); return; }
-  if (password.length < 8) throw new Error('ADMIN_PASSWORD must be at least 8 characters');
-  let existing = await User.findOne({ email }).select('+passwordHash');
-  if (!existing) { const passwordHash = await bcrypt.hash(password, 12); await User.create({ name: process.env.ADMIN_NAME || 'Administrator', email, passwordHash, role: 'admin', status: 'active', trialStartedAt: null, trialEndsAt: null, plan: null, planStatus: 'NONE' }); console.log(`Bootstrap admin created: ${email}`); return; }
-  let changed = false;
-  if (existing.role !== 'admin') { existing.role = 'admin'; changed = true; }
-  if (existing.status !== 'active') { existing.status = 'active'; changed = true; }
-  const passwordMatches = existing.passwordHash ? await bcrypt.compare(password, existing.passwordHash) : false;
-  if (!passwordMatches) { existing.passwordHash = await bcrypt.hash(password, 12); changed = true; }
-  if (existing.trialStartedAt || existing.trialEndsAt || existing.plan || existing.planStatus !== 'NONE' || existing.planStartedAt || existing.planExpiresAt) { existing.trialStartedAt = null; existing.trialEndsAt = null; existing.plan = null; existing.planStartedAt = null; existing.planExpiresAt = null; existing.planStatus = 'NONE'; changed = true; }
-  if (process.env.ADMIN_NAME && existing.name !== process.env.ADMIN_NAME) { existing.name = process.env.ADMIN_NAME; changed = true; }
-  if (changed) await existing.save({ validateBeforeSave: false });
-  console.log(`Bootstrap admin ready: ${email}`);
-}
-
-async function expireSubscriptions() { const now = new Date(); const expiredUsers = await User.find({ role: 'merchant', plan: { $ne: null }, planExpiresAt: { $ne: null, $lte: now }, planStatus: 'ACTIVE' }).select('_id plan'); for (const user of expiredUsers) { await SubscriptionOrder.updateMany({ user: user._id, plan: user.plan, status: 'SUCCESS', planExpiresAt: { $lte: now } }, { $set: { status: 'EXPIRED' } }); await User.updateOne({ _id: user._id }, { $set: { plan: null, planStatus: 'EXPIRED' } }); } return expiredUsers.length; }
-async function gmailAutoSyncTick() { const settings = await GatewaySettings.findOne({ key: 'global' }).lean(); const enabled = settings?.gmailAutoSync !== false && process.env.GMAIL_AUTO_SYNC !== 'false'; if (!enabled) return; try { const result = await verifyAllConnectedGmails(); if (result.confirmed) console.log('Gmail verification:', result); } catch (e) { console.error('Gmail sync failed:', e.message); } }
-
-async function repairUniqueIndexes() {
-  try {
-    const orderIndexes = await Order.collection.indexes();
-    const legacyOrder = orderIndexes.find(index => index.name === 'merchant_1_utr_1');
-    if (legacyOrder && !legacyOrder.partialFilterExpression) {
-      await Order.collection.dropIndex('merchant_1_utr_1');
-      console.log('Dropped legacy Order merchant_1_utr_1 index.');
-    }
-    const receiptIndexes = await PaymentReceipt.collection.indexes();
-    const legacyReceipt = receiptIndexes.find(index => index.name === 'merchant_1_utr_1');
-    if (legacyReceipt && !legacyReceipt.partialFilterExpression) {
-      await PaymentReceipt.collection.dropIndex('merchant_1_utr_1');
-      console.log('Dropped legacy PaymentReceipt merchant_1_utr_1 index.');
-    }
-    await Order.syncIndexes();
-    await PaymentReceipt.syncIndexes();
-    console.log('Order and PaymentReceipt indexes synchronized.');
-  } catch (e) {
-    console.error('Unique index repair failed:', e.message);
-    throw e;
-  }
-}
-
-connectDatabase().then(async () => {
-  await repairUniqueIndexes();
-  await ensureBootstrapAdmin();
-  app.listen(port, () => console.log(`OmniUPI API listening on port ${port}`));
-  await expireSubscriptions().catch(e => console.error('Initial expiry check failed:', e.message));
-  setInterval(() => expireSubscriptions().catch(e => console.error('Subscription expiry check failed:', e.message)), Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS || 60000));
-  setInterval(gmailAutoSyncTick, Number(process.env.GMAIL_SYNC_INTERVAL_MS || 60000));
-}).catch(e => { console.error('Database connection failed:', e.message); process.exit(1); });
+const app = express(); const port = Number(process.env.PORT || 5000); app.set('trust proxy', 1); app.use(helmet()); app.use(cors({ origin: true, credentials: true })); app.use(express.json({ limit: '15mb' })); app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+app.get('/health', (_req,res)=>res.json({ok:true,service:'omniupi-api',brand:'OmniUPI',website:'https://omniupi.in',api:'https://api.omniupi.in'}));
+app.get('/api/v1', (_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',version:'v1',website:'https://omniupi.in',docs:'https://omniupi.in/docs'}));
+const xmlEscape=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&apos;'); const sitemapHeaders=res=>res.type('application/xml').set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0').set('CDN-Cache-Control','no-store').set('Vercel-CDN-Cache-Control','no-store'); const staticPages=[['https://omniupi.in/','daily','1.0'],['https://omniupi.in/blog','daily','0.8'],['https://omniupi.in/privacy.html','monthly','0.5'],['https://omniupi.in/terms.html','monthly','0.5'],['https://omniupi.in/refund.html','monthly','0.4'],['https://omniupi.in/shipping.html','monthly','0.4'],['https://omniupi.in/contact.html','monthly','0.5']]; const urlset=urls=>'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(({loc,changefreq,priority,lastmod})=>`<url><loc>${xmlEscape(loc)}</loc>${lastmod?`<lastmod>${new Date(lastmod).toISOString()}</lastmod>`:''}<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`).join('')+'</urlset>';
+app.get('/sitemap.xml',(_req,res)=>sitemapHeaders(res).send('<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><sitemap><loc>https://omniupi.in/sitemap-pages.xml</loc></sitemap><sitemap><loc>https://omniupi.in/sitemap-blog.xml</loc></sitemap></sitemapindex>'));
+app.get('/sitemap-pages.xml',(_req,res)=>sitemapHeaders(res).send(urlset(staticPages.map(([loc,changefreq,priority])=>({loc,changefreq,priority})))));
+app.get('/sitemap-blog.xml',async(_req,res)=>{try{const blogs=await Blog.find({status:'PUBLISHED',publishedAt:{$lte:new Date()}}).select('slug publishedAt updatedAt createdAt').sort({publishedAt:-1,createdAt:-1}).lean();res.send(urlset(blogs.map(b=>({loc:`https://omniupi.in/blog/${encodeURIComponent(b.slug)}`,changefreq:'weekly',priority:'0.7',lastmod:b.updatedAt||b.publishedAt||b.createdAt})))}catch(e){console.error('Blog sitemap error:',e);res.status(500).send(urlset([]))}});
+app.get('/robots.txt',(_req,res)=>res.type('text/plain').set('Cache-Control','public, max-age=300').send('User-agent: *\nAllow: /\nDisallow: /dashboard\nDisallow: /admin\nSitemap: https://omniupi.in/sitemap.xml\n'));
+app.use('/api/v1/auth',authRoutes); app.use('/api/v1/merchants',merchantRoutes); app.use('/api/v1/admin',adminRoutes); app.use('/api/v1/admin/payment-links',adminPaymentLinksRoutes); app.use('/api/v1/admin/blogs',adminBlogRoutes); app.use('/api/v1/v1/admin/blogs',adminBlogRoutes); app.use('/api/v1/gmail',gmailRoutes); app.use('/api/v1/subscriptions',subscriptionRoutes); app.use('/api/v1/account',accountRoutes); app.use('/api/v1/orders',ordersRoutes); app.use('/api/v1/kyc',kycRoutes); app.use('/api/v1/kyc-config',kycConfigRoutes); app.use('/api/v1/videos',videoRoutes); app.use('/api/v1/support',supportRoutes); app.use('/api/v1/public-checkout',checkoutRoutes); app.use('/api/v1/blogs',blogRoutes); app.use('/api',publicApiRoutes); app.use((err,_req,res,_next)=>{console.error(err);res.status(500).json({status:false,message:'Internal server error'})});
+async function ensureBootstrapAdmin(){const email=String(process.env.ADMIN_EMAIL||'').trim().toLowerCase(),password=String(process.env.ADMIN_PASSWORD||'');if(!email||!password)return;if(password.length<8)throw new Error('ADMIN_PASSWORD must be at least 8 characters');let existing=await User.findOne({email}).select('+passwordHash');if(!existing){const passwordHash=await bcrypt.hash(password,12);await User.create({name:process.env.ADMIN_NAME||'Administrator',email,passwordHash,role:'admin',status:'active',trialStartedAt:null,trialEndsAt:null,plan:null,planStatus:'NONE'});return}let changed=false;if(existing.role!=='admin'){existing.role='admin';changed=true}if(existing.status!=='active'){existing.status='active';changed=true}if(existing.passwordHash&&!(await bcrypt.compare(password,existing.passwordHash))){existing.passwordHash=await bcrypt.hash(password,12);changed=true}if(changed)await existing.save({validateBeforeSave:false})}
+async function expireSubscriptions(){const now=new Date();const expired=await User.find({role:'merchant',plan:{$ne:null},planExpiresAt:{$ne:null,$lte:now},planStatus:'ACTIVE'}).select('_id plan');for(const user of expired){await SubscriptionOrder.updateMany({user:user._id,plan:user.plan,status:'SUCCESS',planExpiresAt:{$lte:now}},{$set:{status:'EXPIRED'}});await User.updateOne({_id:user._id},{$set:{plan:null,planStatus:'EXPIRED'}})}return expired.length}
+async function gmailAutoSyncTick(){const settings=await GatewaySettings.findOne({key:'global'}).lean();if(settings?.gmailAutoSync===false||process.env.GMAIL_AUTO_SYNC==='false')return;try{const result=await verifyAllConnectedGmails();if(result.confirmed)console.log('Gmail IMAP verification:',result)}catch(e){console.error('Gmail IMAP sync failed:',e.message)}}
+async function repairUniqueIndexes(){try{for(const Model of [Order,PaymentReceipt]){const indexes=await Model.collection.indexes();const legacy=indexes.find(i=>i.name==='merchant_1_utr_1');if(legacy&&!legacy.partialFilterExpression)await Model.collection.dropIndex('merchant_1_utr_1');await Model.syncIndexes()}}catch(e){console.error('Unique index repair failed:',e.message);throw e}}
+connectDatabase().then(async()=>{await repairUniqueIndexes();await ensureBootstrapAdmin();app.listen(port,()=>console.log(`OmniUPI API listening on port ${port}`));await expireSubscriptions().catch(e=>console.error(e.message));setInterval(()=>expireSubscriptions().catch(e=>console.error(e.message)),Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS||60000));setInterval(gmailAutoSyncTick,Number(process.env.GMAIL_SYNC_INTERVAL_MS||60000))}).catch(e=>{console.error('Database connection failed:',e.message);process.exit(1)});
