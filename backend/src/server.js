@@ -20,6 +20,7 @@ import checkoutRoutes from './routes/checkout.js';
 import supportRoutes from './routes/support.js';
 import blogRoutes, { adminBlogRoutes } from './routes/blogs.js';
 import User from './models/User.js';
+import Order from './models/Order.js';
 import GatewaySettings from './models/GatewaySettings.js';
 import SubscriptionOrder from './models/SubscriptionOrder.js';
 import Blog from './models/Blog.js';
@@ -29,9 +30,9 @@ const app=express();
 const port=Number(process.env.PORT||5000);
 app.set('trust proxy',1);app.use(helmet());app.use(cors({origin:true,credentials:true}));app.use(express.json({limit:'15mb'}));app.use(express.urlencoded({extended:false,limit:'1mb'}));
 app.get('/health',(_req,res)=>res.json({ok:true,service:'omniupi-api',brand:'OmniUPI',website:'https://omniupi.in',api:'https://api.omniupi.in'}));
-app.get('/api/v1',(_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',version:'v1',website:'https://omniupi.in',docs:'https://omniupi.in/docs'}));
+app.get('/api/v1',(_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',version:'v1',website:'https://omniupi.in',docs:'https://omniupi.in/docs'});
 
-const xmlEscape=value=>String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
+const xmlEscape=value=>String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&apos;');
 const sitemapHeaders=res=>res.type('application/xml').set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0').set('CDN-Cache-Control','no-store').set('Vercel-CDN-Cache-Control','no-store');
 const staticPages=[['https://omniupi.in/','daily','1.0'],['https://omniupi.in/blog','daily','0.8'],['https://omniupi.in/privacy.html','monthly','0.5'],['https://omniupi.in/terms.html','monthly','0.5'],['https://omniupi.in/refund.html','monthly','0.4'],['https://omniupi.in/shipping.html','monthly','0.4'],['https://omniupi.in/contact.html','monthly','0.5']];
 const urlset=(urls)=>'<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(({loc,changefreq,priority,lastmod})=>`<url><loc>${xmlEscape(loc)}</loc>${lastmod?`<lastmod>${new Date(lastmod).toISOString()}</lastmod>`:''}<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`).join('')+'</urlset>';
@@ -58,4 +59,21 @@ async function ensureBootstrapAdmin(){
 }
 async function expireSubscriptions(){const now=new Date();const expiredUsers=await User.find({role:'merchant',plan:{$ne:null},planExpiresAt:{$ne:null,$lte:now},planStatus:'ACTIVE'}).select('_id plan');for(const user of expiredUsers){await SubscriptionOrder.updateMany({user:user._id,plan:user.plan,status:'SUCCESS',planExpiresAt:{$lte:now}},{$set:{status:'EXPIRED'}});await User.updateOne({_id:user._id},{$set:{plan:null,planStatus:'EXPIRED'}});}return expiredUsers.length;}
 async function gmailAutoSyncTick(){const settings=await GatewaySettings.findOne({key:'global'}).lean();const enabled=settings?.gmailAutoSync !== false && process.env.GMAIL_AUTO_SYNC !== 'false';if(!enabled)return;try{const result=await verifyAllConnectedGmails();if(result.confirmed)console.log('Gmail verification:',result);}catch(e){console.error('Gmail sync failed:',e.message);}}
-connectDatabase().then(async()=>{await ensureBootstrapAdmin();app.listen(port,()=>console.log(`OmniUPI API listening on port ${port}`));await expireSubscriptions().catch(e=>console.error('Initial expiry check failed:',e.message));setInterval(()=>expireSubscriptions().catch(e=>console.error('Subscription expiry check failed:',e.message)),Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS||60000));setInterval(gmailAutoSyncTick,Number(process.env.GMAIL_SYNC_INTERVAL_MS||60000));}).catch(e=>{console.error('Database connection failed:',e.message);process.exit(1)});
+
+async function repairOrderUtrIndex(){
+  try {
+    const indexes=await Order.collection.indexes();
+    const legacy=indexes.find(index=>index.name==='merchant_1_utr_1');
+    if(legacy && !legacy.partialFilterExpression){
+      await Order.collection.dropIndex('merchant_1_utr_1');
+      console.log('Dropped legacy Order merchant_1_utr_1 index.');
+    }
+    await Order.syncIndexes();
+    console.log('Order indexes synchronized.');
+  } catch(e){
+    console.error('Order index repair failed:',e.message);
+    throw e;
+  }
+}
+
+connectDatabase().then(async()=>{await repairOrderUtrIndex();await ensureBootstrapAdmin();app.listen(port,()=>console.log(`OmniUPI API listening on port ${port}`));await expireSubscriptions().catch(e=>console.error('Initial expiry check failed:',e.message));setInterval(()=>expireSubscriptions().catch(e=>console.error('Subscription expiry check failed:',e.message)),Number(process.env.SUBSCRIPTION_EXPIRY_CHECK_MS||60000));setInterval(gmailAutoSyncTick,Number(process.env.GMAIL_SYNC_INTERVAL_MS||60000));}).catch(e=>{console.error('Database connection failed:',e.message);process.exit(1)});
