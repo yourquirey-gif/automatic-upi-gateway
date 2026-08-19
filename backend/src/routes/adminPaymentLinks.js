@@ -3,7 +3,6 @@ import crypto from 'crypto';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
 import GatewaySettings from '../models/GatewaySettings.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
@@ -48,13 +47,11 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ status: false, message: 'Amount exceeds the allowed limit.' });
     }
 
-    // Always use the actual authenticated administrator record. Never use a normal user's UPI.
     const ownerId = req.admin?._id || req.auth?.sub;
     if (!ownerId) {
       return res.status(401).json({ status: false, message: 'Admin session is invalid. Please login again.' });
     }
 
-    // The link must be tied to the SAME Admin Settlement UPI that was saved and Gmail-verified.
     const settings = await GatewaySettings.findOne({ key: 'global' }).lean();
     const configuredUpi = normalizeUpi(settings?.settlementUpiId);
     if (!configuredUpi) {
@@ -76,10 +73,9 @@ router.post('/', async (req, res, next) => {
       });
     }
 
-    const id = clean(req.body?.orderId || req.body?.order_id, 100) || orderId();
-    if (await Order.exists({ orderId: id })) {
-      return res.status(409).json({ status: false, message: 'Order ID already exists. Please try again.' });
-    }
+    // Never resurrect an old/expired order ID. If a client accidentally reuses one, generate a fresh ID.
+    let id = clean(req.body?.orderId || req.body?.order_id, 100) || orderId();
+    while (await Order.exists({ orderId: id })) id = orderId();
 
     const amountFixed = Number(amount.toFixed(2));
     const expiresAt = new Date(Date.now() + TTL_MS);
@@ -87,24 +83,33 @@ router.post('/', async (req, res, next) => {
     const remark = clean(req.body?.remark || req.body?.remark1, 200);
     const redirectUrl = clean(req.body?.redirectUrl || req.body?.redirect_url, 1000);
 
-    const order = await Order.create({
-      merchant: merchant._id,
-      owner: ownerId,
-      orderId: id,
-      amount: amountFixed,
-      customerMobile,
-      redirectUrl,
-      remark1: remark,
-      remark2: clean(req.body?.remark2, 200),
-      status: 'PENDING',
-      feePercent: Number(merchant.planTransactionFeePercent || 0),
-      feeAmount: 0,
-      netAmount: amountFixed,
-      feeSettlementStatus: 'NOT_APPLICABLE',
-      verificationSource: 'gmail',
-      paymentUrl: paymentUrlFor(id),
-      expiresAt
-    });
+    let order;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        order = await Order.create({
+          merchant: merchant._id,
+          owner: ownerId,
+          orderId: id,
+          amount: amountFixed,
+          customerMobile,
+          redirectUrl,
+          remark1: remark,
+          remark2: clean(req.body?.remark2, 200),
+          status: 'PENDING',
+          feePercent: Number(merchant.planTransactionFeePercent || 0),
+          feeAmount: 0,
+          netAmount: amountFixed,
+          feeSettlementStatus: 'NOT_APPLICABLE',
+          verificationSource: 'gmail',
+          paymentUrl: paymentUrlFor(id),
+          expiresAt
+        });
+        break;
+      } catch (e) {
+        if (e?.code !== 11000 || attempt === 4) throw e;
+        id = orderId();
+      }
+    }
 
     return res.status(201).json({
       status: true,
@@ -120,7 +125,6 @@ router.post('/', async (req, res, next) => {
     });
   } catch (e) {
     console.error('[admin-payment-links] create failed:', e);
-    if (e?.code === 11000) return res.status(409).json({ status: false, message: 'A payment link with this order ID already exists. Please generate again.' });
     if (e?.name === 'ValidationError') return res.status(400).json({ status: false, message: `Payment link data is invalid: ${e.message}` });
     return res.status(500).json({ status: false, message: `Unable to create payment link: ${e?.message || 'server error'}` });
   }
