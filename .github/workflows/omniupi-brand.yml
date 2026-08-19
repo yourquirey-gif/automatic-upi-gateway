@@ -63,11 +63,49 @@ jobs:
               print(name)
           PY
 
-      - name: Commit OmniUPI cleanup
+      - name: Generate production SEO files
+        run: |
+          cat > sitemap-pages.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://omniupi.in/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
+            <url><loc>https://omniupi.in/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+            <url><loc>https://omniupi.in/privacy.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+            <url><loc>https://omniupi.in/terms.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+            <url><loc>https://omniupi.in/refund.html</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+            <url><loc>https://omniupi.in/shipping.html</loc><changefreq>monthly</changefreq><priority>0.4</priority></url>
+            <url><loc>https://omniupi.in/contact.html</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+          </urlset>
+          EOF
+
+          cat > sitemap-blog.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <url><loc>https://omniupi.in/blog</loc><changefreq>daily</changefreq><priority>0.8</priority></url>
+          </urlset>
+          EOF
+
+          cat > sitemap.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+            <sitemap><loc>https://omniupi.in/sitemap-pages.xml</loc></sitemap>
+            <sitemap><loc>https://omniupi.in/sitemap-blog.xml</loc></sitemap>
+          </sitemapindex>
+          EOF
+
+          cat > robots.txt <<'EOF'
+          User-agent: *
+          Allow: /
+          Disallow: /dashboard
+          Disallow: /admin
+          Sitemap: https://omniupi.in/sitemap.xml
+          EOF
+
+      - name: Commit OmniUPI cleanup and SEO files
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
           git diff --cached --quiet && exit 0
-          git commit -m "fix: replace legacy AutoGateway branding and endpoints"
+          git commit -m "fix: publish static sitemap and robots"
           git push
