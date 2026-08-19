@@ -49,11 +49,6 @@ function extractAmounts(text) {
   return [...new Set([...normalized.matchAll(/(?:₹|INR|Rs\.?)[\s:]*([0-9]+(?:\.[0-9]{1,2})?)/gi)].map(m => Number(m[1])).filter(Number.isFinite))];
 }
 function amountMatches(value, expected) { return Number.isFinite(value) && Math.abs(Number(value) - Number(expected)) < 0.005; }
-function isReceivedPayment(text) {
-  const value = String(text || '');
-  if (/(payment|transaction).*(failed|declined|reversed|refunded|cancelled)/i.test(value)) return false;
-  return /(successfully\s+received|payment\s+received|received\s+(?:₹|inr|rs\.?|amount)|credited|successfully\s+credited|transaction\s+successful|payment\s+successful)/i.test(value);
-}
 function containsExactOrderId(text, orderId) {
   const value = String(text || '');
   const id = String(orderId || '').trim();
@@ -118,18 +113,18 @@ async function saveReceipt({ merchant, message, utr, amount, receivedAt }) {
 }
 
 async function verifyOrderFromMessage({ merchant, order, message }) {
+  // Payment verification is intentionally based only on the exact OmniUPI order ID and exact amount.
+  // The complete Gmail message is inspected. UTR is stored when available, but is not required.
   const text = `${message.data.snippet || ''}\n${extractText(message.data.payload)}`;
   if (!messageMatchesOrder(text, order)) return { confirmed: false, reason: 'order_id_mismatch' };
-  if (!isReceivedPayment(text)) return { confirmed: false, reason: 'not_received_payment' };
+
   const amounts = extractAmounts(text);
   if (!amounts.some(amount => amountMatches(amount, order.amount))) return { confirmed: false, reason: 'amount_mismatch' };
-  const receivedAt = new Date(Number(message.data.internalDate || 0));
-  if (!Number.isFinite(receivedAt.getTime())) return { confirmed: false, reason: 'invalid_timestamp' };
-  const createdAt = new Date(order.createdAt).getTime();
-  const expiresAt = new Date(order.expiresAt).getTime();
-  if (!Number.isFinite(createdAt) || !Number.isFinite(expiresAt) || receivedAt.getTime() < createdAt - 10 * 60 * 1000 || receivedAt.getTime() > expiresAt) return { confirmed: false, reason: 'timestamp_out_of_order_window' };
 
+  const receivedAt = new Date(Number(message.data.internalDate || 0));
+  const paidAt = Number.isFinite(receivedAt.getTime()) ? receivedAt : new Date();
   const utr = extractUtr(text);
+
   if (utr) {
     const reused = await Order.findOne({ merchant: merchant._id, utr, status: 'SUCCESS', _id: { $ne: order._id } }).select('_id orderId');
     if (reused) return { confirmed: false, reason: 'utr_already_used' };
@@ -139,16 +134,21 @@ async function verifyOrderFromMessage({ merchant, order, message }) {
 
   const existingReceipt = await PaymentReceipt.findOne({ merchant: merchant._id, messageId: message.id });
   if (existingReceipt?.consumed && String(existingReceipt.order || '') !== String(order._id)) return { confirmed: false, reason: 'message_already_consumed' };
-  const receipt = existingReceipt || await saveReceipt({ merchant, message, utr, amount: order.amount, receivedAt });
-  if (!receipt || receipt.consumed && String(receipt.order || '') !== String(order._id)) return { confirmed: false, reason: 'receipt_unavailable' };
+  const receipt = existingReceipt || await saveReceipt({ merchant, message, utr, amount: order.amount, receivedAt: paidAt });
+  if (!receipt || (receipt.consumed && String(receipt.order || '') !== String(order._id))) return { confirmed: false, reason: 'receipt_unavailable' };
 
   const fee = Number((order.amount * (order.feePercent || 0) / 100).toFixed(2));
-  const claimed = await Order.findOneAndUpdate({ _id: order._id, merchant: merchant._id, owner: order.owner, status: 'PENDING' }, { $set: { status: 'SUCCESS', paidAt: receivedAt, ...(utr ? { utr } : {}), feeAmount: fee, netAmount: Number((order.amount - fee).toFixed(2)), feeSettlementStatus: fee > 0 ? 'PENDING' : 'NOT_APPLICABLE', verificationSource: 'gmail', verificationMessageId: message.id, paymentReceipt: receipt._id } }, { new: true });
+  const claimed = await Order.findOneAndUpdate(
+    { _id: order._id, merchant: merchant._id, owner: order.owner, status: 'PENDING' },
+    { $set: { status: 'SUCCESS', paidAt, ...(utr ? { utr } : {}), feeAmount: fee, netAmount: Number((order.amount - fee).toFixed(2)), feeSettlementStatus: fee > 0 ? 'PENDING' : 'NOT_APPLICABLE', verificationSource: 'gmail', verificationMessageId: message.id, paymentReceipt: receipt._id } },
+    { new: true }
+  );
   if (!claimed) return { confirmed: false, reason: 'order_already_processed' };
+
   await PaymentReceipt.updateOne({ _id: receipt._id }, { $set: { consumed: true, order: claimed._id } });
   const merchantUser = await User.findById(claimed.owner).select('+instanceSecret webhookUrl userId');
   if (merchantUser) await sendMerchantWebhook(merchantUser, claimed);
-  return { confirmed: true, order: claimed, utr: utr || null, receivedAt };
+  return { confirmed: true, order: claimed, utr: utr || null, receivedAt: paidAt };
 }
 
 async function verifyConnection(connection) {
@@ -165,7 +165,7 @@ async function verifyConnection(connection) {
   for (const id of ids) {
     const message = await gmail.users.messages.get({ userId: 'me', id, format: 'full' });
     const text = `${message.data.snippet || ''}\n${extractText(message.data.payload)}`;
-    const matches = pending.filter(order => order.status === 'PENDING' && messageMatchesOrder(text, order));
+    const matches = pending.filter(order => order.status === 'PENDING' && messageMatchesOrder(text, order) && extractAmounts(text).some(amount => amountMatches(amount, order.amount)));
     if (matches.length !== 1) continue;
     const result = await verifyOrderFromMessage({ merchant, order: matches[0], message });
     if (result.confirmed) confirmed++;
@@ -202,7 +202,7 @@ export async function verifyMerchantVerificationPayment({ merchant, connection }
   const order = await getVerificationOrder(merchant);
   if (order.status === 'SUCCESS') {
     merchant.verificationStatus = 'verified'; merchant.status = 'active'; merchant.verifiedAt = order.paidAt || new Date();
-    merchant.verificationMessage = 'UPI verified using an exact ₹1 verification payment matched to the Gmail payment email.';
+    merchant.verificationMessage = 'UPI verified using exact verification Order ID and amount matched in the Gmail payment email.';
     await merchant.save();
     return { verified: true, order, message: merchant.verificationMessage };
   }
@@ -217,7 +217,7 @@ export async function verifyMerchantVerificationPayment({ merchant, connection }
     if (result.confirmed) {
       const refreshed = await Order.findById(order._id);
       merchant.verificationStatus = 'verified'; merchant.status = 'active'; merchant.verifiedAt = refreshed?.paidAt || new Date();
-      merchant.verificationMessage = 'UPI verified using an exact ₹1 verification payment matched to the Gmail payment email.';
+      merchant.verificationMessage = 'UPI verified using exact verification Order ID and amount matched in the Gmail payment email.';
       await merchant.save();
       return { verified: true, order: refreshed, message: merchant.verificationMessage };
     }
