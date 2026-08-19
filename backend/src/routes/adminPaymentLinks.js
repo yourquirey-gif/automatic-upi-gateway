@@ -17,16 +17,19 @@ const paymentUrlFor = id => `${PAYMENT_PAGE}?order_id=${encodeURIComponent(id)}`
 router.get('/', async (req, res, next) => {
   try {
     const limit = Math.min(Math.max(Number(req.query.limit) || 100, 1), 500);
-    const now = new Date();
-    await Order.updateMany(
-      { owner: req.auth.sub, status: 'PENDING', expiresAt: { $lte: now } },
-      { $set: { status: 'EXPIRED' } }
-    );
     const orders = await Order.find({ owner: req.auth.sub })
       .populate('merchant', 'name upiId provider status verificationStatus')
       .sort({ createdAt: -1 }).limit(limit).lean();
+    const now = Date.now();
     res.set('Cache-Control', 'no-store, max-age=0');
-    res.json({ status: true, links: orders.map(o => ({ ...o, paymentUrl: paymentUrlFor(o.orderId) })) });
+    res.json({
+      status: true,
+      links: orders.map(o => ({
+        ...o,
+        status: o.status === 'PENDING' && o.expiresAt && new Date(o.expiresAt).getTime() <= now ? 'EXPIRED' : o.status,
+        paymentUrl: paymentUrlFor(o.orderId)
+      }))
+    });
   } catch (e) { next(e); }
 });
 
