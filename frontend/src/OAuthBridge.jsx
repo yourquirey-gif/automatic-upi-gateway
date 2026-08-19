@@ -75,7 +75,7 @@ function decorateMerchantTable() {
       ? '<span class="status-ok">Active</span>'
       : '<span class="status-pending">Inactive</span>';
 
-    let verifyButton = actionCell.querySelector('.verify-btn');
+    const verifyButton = actionCell.querySelector('.verify-btn');
     if (verifyButton) {
       verifyButton.innerHTML = verified
         ? '<span style="display:inline-flex;align-items:center;gap:5px">✓ Verified</span>'
@@ -84,26 +84,8 @@ function decorateMerchantTable() {
       verifyButton.title = verified ? 'UPI verified' : 'Verify UPI ID with Google Gmail';
     }
 
-    let deleteButton = actionCell.querySelector('.merchant-delete-btn');
-    if (!deleteButton) {
-      deleteButton = document.createElement('button');
-      deleteButton.type = 'button';
-      deleteButton.className = 'merchant-delete-btn';
-      deleteButton.textContent = 'Delete';
-      deleteButton.style.cssText = 'margin-left:7px;border:1px solid #f0caca;background:#fff5f5;color:#d64545;border-radius:9px;padding:8px 11px;font-weight:750;cursor:pointer;';
-      deleteButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        const current = readMerchants();
-        const target = current[index];
-        if (!target) return;
-        const name = target.label || target.upiId || target.mobile || 'this merchant';
-        if (!window.confirm(`Delete ${name}? This will remove the merchant from this dashboard.`)) return;
-        writeMerchants(current.filter((_, i) => i !== index));
-        window.location.reload();
-      });
-      actionCell.appendChild(deleteButton);
-    }
+    // Delete is handled by the dashboard's own merchant actions.
+    // Do not add DOM observers or dynamically mutate the table here.
   });
 }
 
@@ -173,16 +155,20 @@ export default function OAuthBridge() {
       window.location.href = `${API_BASE}/auth/google/merchant?upi=${encodeURIComponent(upi)}&mobile=${encodeURIComponent(mobile)}`;
     };
 
-    if (!handleOAuthCallback()) window.addEventListener('hashchange', handleOAuthCallback);
+    const callbackHandled = handleOAuthCallback();
+    if (!callbackHandled) {
+      window.addEventListener('hashchange', handleOAuthCallback);
+    }
+
     document.addEventListener('click', handleClick, true);
 
-    const observer = new MutationObserver(() => decorateMerchantTable());
-    observer.observe(document.body, { childList: true, subtree: true });
-    const timer = setTimeout(decorateMerchantTable, 250);
+    // Run once after the dashboard has rendered. No MutationObserver is used,
+    // because changing table cells from inside an observer creates an endless
+    // mutation loop and freezes the page when the user clicks dashboard options.
+    const timer = setTimeout(decorateMerchantTable, 300);
 
     return () => {
       clearTimeout(timer);
-      observer.disconnect();
       window.removeEventListener('hashchange', handleOAuthCallback);
       document.removeEventListener('click', handleClick, true);
     };
