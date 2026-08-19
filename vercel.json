@@ -3,7 +3,6 @@
     {"source": "/blog.html", "destination": "/blog", "permanent": true}
   ],
   "rewrites": [
-    {"source": "/sitemap.xml", "destination": "/api/sitemap"},
     {"source": "/robots.txt", "destination": "https://api.omniupi.in/robots.txt"},
     {"source": "/blog/:slug", "destination": "/blog-post.html?slug=:slug"}
   ]
