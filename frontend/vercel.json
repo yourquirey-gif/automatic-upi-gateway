@@ -14,6 +14,18 @@
   ],
   "rewrites": [
     {
+      "source": "/sitemap.xml",
+      "destination": "https://api.omniupi.in/sitemap.xml"
+    },
+    {
+      "source": "/sitemap-pages.xml",
+      "destination": "https://api.omniupi.in/sitemap-pages.xml"
+    },
+    {
+      "source": "/sitemap-blog.xml",
+      "destination": "https://api.omniupi.in/sitemap-blog.xml"
+    },
+    {
       "source": "/blog/:slug",
       "destination": "/blog-post.html"
     }
