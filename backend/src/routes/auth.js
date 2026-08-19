@@ -16,6 +16,7 @@ function createApiCredentials(){return {apiToken:`ag_live_${crypto.randomBytes(3
 async function googleEnabled(){const settings=await GatewaySettings.findOne({key:'global'}).lean();return settings?.googleOAuthEnabled===true;}
 function publicWeb(){return String(process.env.PUBLIC_WEB_BASE_URL||'https://omniupi.in').replace(/\/$/,'');}
 function normalizeUpi(value){return String(value||'').trim().toLowerCase();}
+async function adminSettlementUpi(){const settings=await GatewaySettings.findOne({key:'global'}).lean();return normalizeUpi(settings?.settlementUpiId);}
 
 // Dedicated administrator login endpoint. This cannot authenticate a normal merchant/user.
 router.post('/admin-login',async(req,res,next)=>{try{
@@ -31,14 +32,14 @@ router.post('/admin-login',async(req,res,next)=>{try{
 router.get('/google/config',async(_req,res,next)=>{try{res.json({status:true,enabled:await googleEnabled()});}catch(e){next(e)}});
 router.get('/google',async(req,res,next)=>{try{if(!await googleEnabled())return res.status(404).send('Google sign-up is currently disabled.');const client=await createGoogleClient('auth');const mode=['login','signup'].includes(String(req.query.mode))?String(req.query.mode):'login';const state=jwt.sign({purpose:'google-auth',mode},process.env.JWT_SECRET,{expiresIn:'10m'});res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'select_account',state,scope:['openid','email','profile']}));}catch(e){next(e)}});
 
-// Merchant onboarding intentionally supports both normal users and administrators.
-// An administrator is still kept as an administrator; this flow only creates/updates
-// the payment merchant record owned by that account. It must not redirect to the
-// administrator-login error page when the admin uses the normal user panel.
+// Merchant onboarding supports normal users and administrators, but the Admin
+// Settlement UPI is private and can never be claimed by a normal account.
 router.get('/google/merchant',async(req,res,next)=>{try{
   if(!await googleEnabled())return res.status(404).send('Google OAuth is currently disabled.');
   const upi=normalizeUpi(req.query.upi),mobile=String(req.query.mobile||'').replace(/\D/g,'');
   if(!upi||!mobile||mobile.length!==10)return res.status(400).send('Valid UPI ID and 10-digit mobile number are required.');
+  const adminUpi=await adminSettlementUpi();
+  if(adminUpi&&upi===adminUpi)return res.status(403).send('This UPI ID is reserved for the administrator. Please enter your own merchant UPI ID.');
   const client=await createGoogleClient('auth');
   const state=jwt.sign({purpose:'merchant-google-onboarding',upi,mobile},process.env.JWT_SECRET,{expiresIn:'10m'});
   res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'consent',state,scope:['openid','email','profile','https://www.googleapis.com/auth/gmail.readonly']}));
@@ -69,9 +70,6 @@ router.get('/google/callback',async(req,res,next)=>{try{
     return res.redirect(`${publicWeb()}/#google_token=${encodeURIComponent(signToken(user))}`);
   }
 
-  // IMPORTANT: do NOT reject administrators here. The merchant onboarding flow is
-  // also used by an administrator who opens the user panel. The administrator role
-  // remains unchanged; only the merchant verification record is updated.
   let user=await User.findOne({$or:[{email},{googleId}]}).select('+passwordHash');
   if(!user){
     const {started,ends}=trialDates(),userId=await nextUserId(),{apiToken,instanceSecret}=createApiCredentials(),passwordHash=await bcrypt.hash(crypto.randomBytes(32).toString('hex'),12);
@@ -81,7 +79,13 @@ router.get('/google/callback',async(req,res,next)=>{try{
     user.googleId=googleId;user.authProvider='google';await user.save({validateBeforeSave:false});
   }
 
+  // Never allow a normal user to onboard using the Admin Settlement UPI, even if
+  // the frontend accidentally sends the admin UPI in the OAuth query parameters.
+  const adminUpi=await adminSettlementUpi();
+  if(user.role!=='admin'&&adminUpi&&normalizeUpi(payload.upi)===adminUpi)return res.status(403).send('This UPI ID is reserved for the administrator. Please use your own merchant UPI ID.');
+
   let merchant=await Merchant.findOne({owner:user._id,upiId:payload.upi});
+  if(merchant?.provider==='admin_settlement'&&user.role!=='admin')return res.status(403).send('Admin Settlement UPI cannot be used by a normal merchant account.');
   if(!merchant){
     merchant=await Merchant.create({owner:user._id,name:name||email.split('@')[0],provider:'upi_gmail',upiId:payload.upi,mobile:payload.mobile,status:'pending',verificationStatus:'verifying',verificationMessage:'Gmail authorization received. Checking the linked payment account email.'});
   }else{
