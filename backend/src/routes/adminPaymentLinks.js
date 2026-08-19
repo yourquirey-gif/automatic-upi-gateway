@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
 import GatewaySettings from '../models/GatewaySettings.js';
+import { requireAuth, requireAdmin } from '../middleware/auth.js';
 
 const router = Router();
 router.use(requireAuth, requireAdmin);
