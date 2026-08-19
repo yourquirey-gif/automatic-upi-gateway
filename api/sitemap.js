@@ -1,0 +1,17 @@
+module.exports = function handler(req, res) {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://omniupi.in/</loc><lastmod>2026-08-19</lastmod><changefreq>daily</changefreq><priority>1.0</priority></url>
+  <url><loc>https://omniupi.in/blog</loc><lastmod>2026-08-19</lastmod><changefreq>daily</changefreq><priority>0.8</priority></url>
+  <url><loc>https://omniupi.in/privacy.html</loc><lastmod>2026-08-19</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://omniupi.in/terms.html</loc><lastmod>2026-08-19</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://omniupi.in/refund.html</loc><lastmod>2026-08-19</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://omniupi.in/shipping.html</loc><lastmod>2026-08-19</lastmod><changefreq>monthly</changefreq><priority>0.4</priority></url>
+  <url><loc>https://omniupi.in/contact.html</loc><lastmod>2026-08-19</lastmod><changefreq>monthly</changefreq><priority>0.5</priority></url>
+</urlset>`;
+
+  res.statusCode = 200;
+  res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+  res.setHeader('Cache-Control', 'public, max-age=300, s-maxage=300');
+  res.end(xml);
+};
