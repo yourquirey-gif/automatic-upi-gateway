@@ -40,9 +40,15 @@ function messageMatchesOrder(text, order) {
 }
 
 async function listMailboxes(client) {
-  const tree = await client.listMailboxes(); const names = [];
-  const walk = nodes => { for (const box of nodes || []) { const path = box.path || box.name; const flags = new Set(box.flags || []); const lower = String(path || '').toLowerCase(); if (!flags.has('\\Trash') && !flags.has('\\Junk') && !lower.includes('spam') && !lower.includes('trash')) names.push(path); if (box.children) walk(box.children); } };
-  walk(tree); return [...new Set(names.filter(Boolean))];
+  // ImapFlow exposes LIST through client.list(); there is no listMailboxes() API.
+  const boxes = await client.list();
+  return [...new Set((boxes || []).map(box => ({
+    path: box.path || box.name,
+    flags: new Set(box.flags || [])
+  })).filter(box => {
+    const lower = String(box.path || '').toLowerCase();
+    return box.path && !box.flags.has('\\Trash') && !box.flags.has('\\Junk') && !lower.includes('spam') && !lower.includes('trash');
+  }).map(box => box.path))];
 }
 async function withImap(connection, fn) {
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: emailOf(connection.email), pass: decryptSecret(connection.appPasswordEncrypted) }, logger: false, socketTimeout: 30000 });
@@ -51,10 +57,14 @@ async function withImap(connection, fn) {
 export async function testGmailAppPassword(email, appPassword) {
   const e = emailOf(email), p = appPassOf(appPassword);
   if (!/^[^@\s]+@gmail\.com$/i.test(e)) throw new Error('Use a valid @gmail.com address.');
-  if (p.length < 12) throw new Error('Enter the Gmail App Password generated for this account.');
+  if (p.length !== 16) throw new Error('Gmail App Password should contain exactly 16 characters after removing spaces.');
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: e, pass: p }, logger: false, socketTimeout: 20000 });
   try { await client.connect(); return { email: e, folders: (await listMailboxes(client)).length }; }
   finally { try { await client.logout(); } catch { try { client.close(); } catch {} } }
+}
+export async function checkStoredGmailConnection(connection) {
+  if (!connection?.email || !connection?.appPasswordEncrypted) throw new Error('Gmail App Password is not connected.');
+  return withImap(connection, async client => ({ email: emailOf(connection.email), folders: (await listMailboxes(client)).length, connected: true, checkedAt: new Date() }));
 }
 
 async function verificationOrder(merchant) {
