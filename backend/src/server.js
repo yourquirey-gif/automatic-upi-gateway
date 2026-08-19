@@ -33,7 +33,7 @@ app.get('/api/v1',(_req,res)=>res.json({name:'OmniUPI API',brand:'OmniUPI',versi
 
 const xmlEscape=value=>String(value||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&apos;');
 const sitemapHeaders=res=>res.type('application/xml').set('Cache-Control','no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0').set('CDN-Cache-Control','no-store').set('Vercel-CDN-Cache-Control','no-store');
-const staticPages=[['https://omniupi.in/','daily','1.0'] ,['https://omniupi.in/blog','daily','0.8']];
+const staticPages=[['https://omniupi.in/','daily','1.0'],['https://omniupi.in/blog','daily','0.8'],['https://omniupi.in/privacy.html','monthly','0.5'],['https://omniupi.in/terms.html','monthly','0.5'],['https://omniupi.in/refund.html','monthly','0.4'],['https://omniupi.in/shipping.html','monthly','0.4'],['https://omniupi.in/contact.html','monthly','0.5']];
 const urlset=(urls)=>'<?xml version="1.0" encoding="UTF-8"?>'+'<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+urls.map(({loc,changefreq,priority,lastmod})=>`<url><loc>${xmlEscape(loc)}</loc>${lastmod?`<lastmod>${new Date(lastmod).toISOString()}</lastmod>`:''}<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`).join('')+'</urlset>';
 
 app.get('/sitemap.xml',(_req,res)=>{const xml='<?xml version="1.0" encoding="UTF-8"?>'+'<sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'+'<sitemap><loc>https://omniupi.in/sitemap-pages.xml</loc></sitemap>'+'<sitemap><loc>https://omniupi.in/sitemap-blog.xml</loc></sitemap>'+'</sitemapindex>';sitemapHeaders(res).send(xml);});
