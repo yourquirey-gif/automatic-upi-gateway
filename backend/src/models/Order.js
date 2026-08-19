@@ -23,6 +23,12 @@ const orderSchema = new mongoose.Schema({
   paymentReceipt: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentReceipt', default: null }
 }, { timestamps: true });
 
-orderSchema.index({ merchant: 1, utr: 1 }, { unique: true, sparse: true });
+// UTR is assigned only after a payment is verified. Do not make unpaid orders
+// collide on a null/missing UTR value. Only real string UTRs must be unique
+// per merchant.
+orderSchema.index(
+  { merchant: 1, utr: 1 },
+  { unique: true, partialFilterExpression: { utr: { $type: 'string' } } }
+);
 
 export default mongoose.model('Order', orderSchema);
