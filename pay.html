@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Pay securely with UPI · OmniUPI</title>
+<meta name="robots" content="noindex,nofollow">
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#f4f7fb;color:#172033;display:grid;place-items:center;padding:18px}.card{width:min(520px,100%);background:#fff;border:1px solid #e4e9f0;border-radius:24px;padding:24px;box-shadow:0 20px 60px #15213a14}.brand{display:flex;align-items:center;gap:10px;font-weight:900;font-size:18px}.logo{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;color:#fff;font-size:23px;background:linear-gradient(135deg,#6267e9,#19b798)}.muted{color:#788497;font-size:12px;line-height:1.5}.amount{text-align:center;padding:20px 0 14px}.amount small{display:block;color:#7d8796;font-size:11px}.amount strong{display:block;font-size:38px;margin-top:5px}.merchant{text-align:center;font-weight:850}.upi{text-align:center;color:#667085;font-size:12px;margin-top:4px;word-break:break-all}.qr{display:flex;justify-content:center;margin:18px 0}.qr img{width:250px;height:250px;border:8px solid #fff;border-radius:14px;box-shadow:0 5px 20px #15213a12}.buttons{display:grid;grid-template-columns:1fr 1fr;gap:8px}.btn{border:0;border-radius:11px;padding:12px;font-weight:850;cursor:pointer}.primary{color:#fff;background:linear-gradient(90deg,#6267e9,#19b798)}.secondary{background:#f3f5f8;color:#273248}.timer{text-align:center;margin:14px 0;padding:10px;border-radius:10px;background:#fff8e8;color:#8a6816;font-size:12px;font-weight:800}.status{text-align:center;margin-top:12px;padding:11px;border-radius:10px;background:#f5f8ff;color:#4e5bc9;font-size:12px;font-weight:800}.success{background:#ecfdf5;color:#166534}.error{background:#fff0f1;color:#b4232f}.footer{text-align:center;color:#a0a8b5;font-size:10px;margin-top:18px}.hidden{display:none!important}@media(max-width:430px){.card{padding:17px;border-radius:18px}.amount strong{font-size:32px}.qr img{width:220px;height:220px}.buttons{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="brand"><div class="logo">ϟ</div><span>OmniUPI</span></div>
+  <div id="loading" class="status">Loading secure payment…</div>
+  <section id="payment" class="hidden">
+    <div class="amount"><small>AMOUNT TO PAY</small><strong id="amount">₹0.00</strong></div>
+    <div id="merchant" class="merchant"></div><div id="upi" class="upi"></div>
+    <div id="timer" class="timer">Checking expiry…</div>
+    <div id="qr" class="qr"><img id="qrImg" alt="UPI payment QR code"></div>
+    <div class="buttons"><button class="btn primary" id="payBtn">Pay with UPI App</button><button class="btn secondary" id="copyBtn">Copy UPI ID</button></div>
+    <div id="instructions" class="muted" style="margin-top:15px;text-align:center"></div>
+    <div id="status" class="status">Waiting for payment…</div>
+  </section>
+  <div id="footer" class="footer">Secure checkout powered by OmniUPI</div>
+</main>
+<script>
+const API='https://api.omniupi.in/api/v1/public-checkout';
+const qs=new URLSearchParams(location.search);const orderId=qs.get('order_id')||qs.get('orderId');
+const $=id=>document.getElementById(id);let data=null,timer=null,poll=null;
+function showError(msg){$('loading').className='status error';$('loading').textContent=msg;$('payment').classList.add('hidden')}
+function money(v){return '₹'+Number(v||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function setStatus(msg,ok=false){$('status').textContent=msg;$('status').className='status'+(ok?' success':'')}
+async function load(){
+ if(!orderId)return showError('Invalid payment link. Missing order ID.');
+ try{const r=await fetch(`${API}/${encodeURIComponent(orderId)}`,{cache:'no-store'});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.message||'Payment link is unavailable.');data=d.result;$('amount').textContent=money(data.amount);$('merchant').textContent=data.merchant.name||'OmniUPI Merchant';$('upi').textContent=data.merchant.upiId||'';$('qrImg').src=data.qrDataUrl;$('instructions').textContent=data.checkout.instructions||'Scan the QR code or open your preferred UPI app to complete the payment.';$('loading').classList.add('hidden');$('payment').classList.remove('hidden');$('copyBtn').onclick=async()=>{try{await navigator.clipboard.writeText(data.merchant.upiId);$('copyBtn').textContent='UPI ID Copied ✓';setTimeout(()=>$('copyBtn').textContent='Copy UPI ID',1500)}catch{alert(data.merchant.upiId)}};$('payBtn').onclick=()=>{location.href=data.upiUrl};startTimer();startPolling();}catch(e){showError(e.message)}
+}
+function startTimer(){clearInterval(timer);const end=new Date(data.expiresAt).getTime();const tick=()=>{const left=Math.max(0,end-Date.now());if(!left){$('timer').textContent='Payment link expired';$('timer').className='timer error';$('payBtn').disabled=true;clearInterval(timer);return}const s=Math.floor(left/1000),m=Math.floor(s/60),sec=String(s%60).padStart(2,'0');$('timer').textContent=`Link expires in ${m}:${sec}`};tick();timer=setInterval(tick,1000)}
+function startPolling(){clearInterval(poll);poll=setInterval(async()=>{try{const r=await fetch(`${API}/${encodeURIComponent(orderId)}/status`,{cache:'no-store'});const d=await r.json();if(!d.result)return;const s=d.result.txnStatus;if(s==='SUCCESS'){clearInterval(poll);clearInterval(timer);$('timer').textContent='Payment received';$('timer').className='timer';setStatus('✓ Payment successful',true);if(d.result.redirectUrl)setTimeout(()=>location.href=d.result.redirectUrl,1200)}else if(s==='FAILED'){clearInterval(poll);setStatus('Payment failed. Please try again.')}else if(s==='EXPIRED'){clearInterval(poll);clearInterval(timer);setStatus('Payment link expired. Please request a new link.')}}catch{}} ,3000)}
+load();
+</script>
+</body></html>
