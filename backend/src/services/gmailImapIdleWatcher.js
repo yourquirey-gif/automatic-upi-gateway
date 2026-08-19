@@ -1,25 +1,19 @@
 import { ImapFlow } from 'imapflow';
 import GmailConnection from '../models/GmailConnection.js';
 import { decryptSecret } from '../utils/secretBox.js';
-import { verifyConnection } from './gmailImapPaymentVerifier.js';
+import { listMailboxes, verifyConnection } from './gmailImapPaymentVerifier.js';
 
 const watchers = new Map();
 const DEBOUNCE_MS = 1000;
 const RECONNECT_MIN_MS = 5000;
 const RECONNECT_MAX_MS = 60000;
 
-function isExcludedMailbox(box) {
-  const path = String(box?.path || box?.name || '').toLowerCase();
-  const flags = new Set(box?.flags || []);
-  return flags.has('\\Trash') || flags.has('\\Junk') || path.includes('spam') || path.includes('trash');
-}
-
-async function findAllMailPath(client) {
+async function findEventMailbox(client) {
   const boxes = await client.list();
-  const all = boxes.find(box => !isExcludedMailbox(box) && new Set(box.flags || []).has('\\All'));
+  const allowed = await listMailboxes(client);
+  const all = boxes.find(box => allowed.includes(box.path || box.name) && new Set(box.flags || []).has('\\All'));
   if (all?.path) return all.path;
-  const fallback = boxes.find(box => !isExcludedMailbox(box) && /all mail/i.test(String(box.path || box.name || '')));
-  return fallback?.path || null;
+  return allowed[0] || null;
 }
 
 async function runVerification(connectionId) {
@@ -35,7 +29,7 @@ async function runVerification(connectionId) {
 
 function scheduleVerification(connectionId) {
   const watcher = watchers.get(String(connectionId));
-  if (!watcher || watcher.verifyTimer) return;
+  if (!watcher || watcher.verifyTimer || watcher.stopped) return;
   watcher.verifyTimer = setTimeout(async () => {
     watcher.verifyTimer = null;
     await runVerification(connectionId);
@@ -44,13 +38,15 @@ function scheduleVerification(connectionId) {
 
 async function startWatcher(connection) {
   const key = String(connection._id);
-  if (watchers.has(key)) return;
+  const existing = watchers.get(key);
+  if (existing) return existing.connectPromise || null;
 
-  const state = { client: null, verifyTimer: null, reconnectTimer: null, stopped: false, delay: RECONNECT_MIN_MS };
+  const state = { client: null, verifyTimer: null, reconnectTimer: null, stopped: false, delay: RECONNECT_MIN_MS, connecting: false, connectPromise: null };
   watchers.set(key, state);
 
   const connect = async () => {
-    if (state.stopped) return;
+    if (state.stopped || state.connecting) return;
+    state.connecting = true;
     try {
       const latest = await GmailConnection.findById(connection._id).select('+appPasswordEncrypted');
       if (!latest?.active || !latest.appPasswordEncrypted) {
@@ -79,10 +75,12 @@ async function startWatcher(connection) {
       client.on('exists', () => scheduleVerification(latest._id));
 
       await client.connect();
-      const mailbox = await findAllMailPath(client);
-      if (!mailbox) throw new Error('Gmail All Mail folder is unavailable.');
-      await client.mailboxOpen(mailbox, { readOnly: true });
+      const eventMailbox = await findEventMailbox(client);
+      if (!eventMailbox) throw new Error('No allowed Gmail mailbox is available for IMAP IDLE.');
+      const allowedCount = (await listMailboxes(client)).length;
+      await client.mailboxOpen(eventMailbox, { readOnly: true });
       state.delay = RECONNECT_MIN_MS;
+      console.log(`Gmail IDLE watcher ready for ${latest.email}: event mailbox ${eventMailbox}, ${allowedCount} allowed mailboxes scanned per event.`);
       await runVerification(latest._id);
 
       while (!state.stopped && state.client === client && !client.closed) {
@@ -94,6 +92,7 @@ async function startWatcher(connection) {
         scheduleReconnect(key);
       }
     } finally {
+      state.connecting = false;
       if (state.client) {
         try { state.client.close(); } catch {}
         state.client = null;
@@ -102,7 +101,9 @@ async function startWatcher(connection) {
   };
 
   state.connect = connect;
-  await connect();
+  state.connectPromise = connect();
+  await state.connectPromise;
+  state.connectPromise = null;
 }
 
 function scheduleReconnect(key) {

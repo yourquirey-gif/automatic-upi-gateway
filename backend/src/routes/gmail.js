@@ -32,7 +32,7 @@ router.post('/connect-admin', requireAuth, requireAdmin, async (req, res, next) 
 } catch (e) { next(e); } });
 
 router.post('/check-connection/:merchantId', requireAuth, async (req, res, next) => { try {
-  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub });
+  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } });
   if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
   const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
   if (!connection) return res.status(400).json({ status: false, connected: false, message: 'Gmail App Password is not connected.' });
@@ -42,7 +42,9 @@ router.post('/check-connection/:merchantId', requireAuth, async (req, res, next)
 } catch (e) { res.status(400).json({ status: false, connected: false, message: e.message || 'Gmail connection check failed' }); } });
 
 router.post('/check-connection-admin', requireAuth, requireAdmin, async (req, res, next) => { try {
-  const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
+  const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' });
+  if (!merchant) return res.status(400).json({ status: false, connected: false, message: 'Admin Settlement UPI is not configured.' });
+  const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
   if (!connection) return res.status(400).json({ status: false, connected: false, message: 'Admin Gmail App Password is not connected.' });
   const result = await checkStoredGmailConnection(connection);
   connection.lastCheckedAt = result.checkedAt; await connection.save();
@@ -50,24 +52,33 @@ router.post('/check-connection-admin', requireAuth, requireAdmin, async (req, re
 } catch (e) { res.status(400).json({ status: false, connected: false, message: e.message || 'Admin Gmail connection check failed' }); } });
 
 router.post('/check/:merchantId', requireAuth, async (req, res, next) => { try {
-  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } }); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
   const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted'); if (!connection) return res.status(400).json({ status: false, message: 'Gmail App Password is not connected.' });
   const result = await verifyMerchantVerificationPayment({ merchant, connection }); res.json({ status: true, ...result });
 } catch (e) { next(e); } });
 
+router.post('/check-admin', requireAuth, requireAdmin, async (req, res, next) => { try {
+  const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' });
+  if (!merchant) return res.status(400).json({ status: false, verified: false, message: 'Admin Settlement UPI is not configured.' });
+  const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
+  if (!connection) return res.status(400).json({ status: false, verified: false, message: 'Admin Gmail App Password is not connected.' });
+  const result = await verifyMerchantVerificationPayment({ merchant, connection }); res.json({ status: true, ...result });
+} catch (e) { next(e); } });
+
 router.get('/status/:merchantId', requireAuth, async (req, res, next) => { try {
-  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }).lean(); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+  const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } }).lean(); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
   const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).lean();
   const order = merchant.config?.verificationOrderId ? await Order.findOne({ merchant: merchant._id, owner: req.auth.sub, orderId: merchant.config.verificationOrderId }).select('orderId amount status paymentUrl expiresAt paidAt utr').lean() : null;
   res.json({ status: true, merchant: { id: merchant._id, upiId: merchant.upiId, status: merchant.status, verificationStatus: merchant.verificationStatus, message: merchant.verificationMessage, verifiedEmail: merchant.verifiedEmail || null }, gmail: connection ? { connected: true, email: connection.email, authType: connection.authType, lastCheckedAt: connection.lastCheckedAt } : { connected: false }, verificationOrder: order });
 } catch (e) { next(e); } });
 
-router.post('/disconnect/:merchantId', requireAuth, async (req, res, next) => { try { const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub }); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' }); await GmailConnection.deleteOne({ merchant: merchant._id }); merchant.verificationStatus = 'pending'; merchant.status = 'pending'; merchant.verifiedEmail = null; merchant.verificationMessage = 'Gmail disconnected. Connect again with a Gmail App Password.'; await merchant.save(); res.json({ status: true, message: 'Gmail App Password connection removed.' }); } catch (e) { next(e); } });
+router.post('/disconnect/:merchantId', requireAuth, async (req, res, next) => { try { const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } }); if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' }); await GmailConnection.deleteOne({ merchant: merchant._id }); merchant.verificationStatus = 'pending'; merchant.status = 'pending'; merchant.verifiedEmail = null; merchant.verificationMessage = 'Gmail disconnected. Connect again with a Gmail App Password.'; await merchant.save(); res.json({ status: true, message: 'Gmail App Password connection removed.' }); } catch (e) { next(e); } });
 
 router.post('/sync', requireAuth, requireAdmin, async (req, res, next) => { try { res.json({ status: true, result: await verifyPendingOrdersForAdmin(req.auth.sub) }); } catch (e) { next(e); } });
 
 router.get('/status', requireAuth, requireAdmin, async (req, res, next) => { try {
-  const connection = await GmailConnection.findOne({ owner: req.auth.sub, active: true }).lean(); const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' }).lean();
+  const merchant = await Merchant.findOne({ owner: req.auth.sub, provider: 'admin_settlement' }).lean();
+  const connection = merchant ? await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).lean() : null;
   const order = merchant?.config?.verificationOrderId ? await Order.findOne({ merchant: merchant._id, owner: req.auth.sub, orderId: merchant.config.verificationOrderId }).select('orderId amount status paymentUrl expiresAt paidAt utr').lean() : null;
   res.json({ status: true, connected: !!connection, email: connection?.email || null, authType: connection?.authType || null, lastCheckedAt: connection?.lastCheckedAt || null, upiVerification: merchant ? { upiId: merchant.upiId, status: merchant.verificationStatus, merchantStatus: merchant.status, verifiedEmail: merchant.verifiedEmail || null, verifiedAt: merchant.verifiedAt || null, message: merchant.verificationMessage || '', verificationOrder: order } : null });
 } catch (e) { next(e); } });

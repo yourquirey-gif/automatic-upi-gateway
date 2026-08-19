@@ -11,49 +11,100 @@ import { sendMerchantWebhook } from './merchantWebhook.js';
 
 const VERIFICATION_AMOUNT = 1;
 const VERIFICATION_TTL_MS = 365 * 24 * 60 * 60 * 1000;
+const VERIFICATION_SINCE_MS = 365 * 24 * 60 * 60 * 1000;
 
 const emailOf = v => String(v || '').trim().toLowerCase();
 const appPassOf = v => String(v || '').replace(/\s+/g, '').trim();
 const upiOf = v => String(v || '').trim().toLowerCase();
 
-function extractText(source) {
-  return (Buffer.isBuffer(source) ? source.toString('utf8') : String(source || ''))
-    .replace(/\r/g, ' ').replace(/=\r?\n/g, '').replace(/=3D/g, '=')
-    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+function decodeQuotedPrintable(value) {
+  return String(value || '')
+    .replace(/=\r?\n/g, '')
+    .replace(/(?:=[0-9A-F]{2})+/gi, sequence => {
+      try { return Buffer.from(sequence.replace(/=/g, ''), 'hex').toString('utf8'); } catch { return sequence; }
+    });
 }
-function extractUtr(text) {
+
+function decodeBase64MimeParts(raw) {
+  return String(raw || '').replace(
+    /Content-Transfer-Encoding:\s*base64\s*\r?\n(?:Content-[^\r\n]*\r?\n)*\r?\n([A-Za-z0-9+/=\r\n]+?)(?=\r?\n--[^\r\n]+|\r?\n\r?\nContent-|$)/gi,
+    (_match, encoded) => {
+      try { return Buffer.from(encoded.replace(/\s+/g, ''), 'base64').toString('utf8'); } catch { return encoded; }
+    }
+  );
+}
+
+function decodeHtmlEntities(value) {
+  return String(value || '')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_m, n) => String.fromCharCode(parseInt(n, 16)));
+}
+
+export function extractText(source) {
+  const raw = Buffer.isBuffer(source) ? source.toString('utf8') : String(source || '');
+  const decoded = decodeQuotedPrintable(decodeBase64MimeParts(raw));
+  return decodeHtmlEntities(decoded)
+    .replace(/\r/g, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function extractUtr(text) {
   for (const pattern of [
     /(?:UTR|UPI\s*(?:Ref(?:erence)?|Transaction\s*(?:ID|No\.?)?)|Transaction\s*(?:ID|No\.?)|Txn\s*(?:ID|No\.?)|Reference\s*(?:ID|No\.?)?)\s*[:#\-]?\s*([A-Za-z0-9-]{8,64})/i,
     /\b(FMPI[A-Z0-9]{8,60})\b/i
   ]) { const m = String(text || '').match(pattern); if (m?.[1]) return m[1]; }
   return null;
 }
-function extractAmounts(text) {
+
+export function extractAmounts(text) {
   const normalized = String(text || '').replace(/,/g, '');
-  return [...new Set([...normalized.matchAll(/(?:₹|INR|Rs\.?)[\s:]*([0-9]+(?:\.[0-9]{1,2})?)/gi)].map(m => Number(m[1])).filter(Number.isFinite))];
-}
-function amountMatches(a, b) { return Number.isFinite(a) && Math.abs(Number(a) - Number(b)) < 0.005; }
-function messageMatchesOrder(text, order) {
-  const id = String(order?.orderId || '').trim(); if (!id) return false;
-  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`(?:^|\\b)Payment\\s+${escaped}(?:\\b|$)`, 'i').test(text) || new RegExp(`(?:^|\\b)${escaped}(?:\\b|$)`, 'i').test(text);
+  const explicit = [...normalized.matchAll(/(?:Amount|Received|Credited|Paid)\s*[:\-]?\s*(?:₹|INR|Rs\.?)[\s:]*([0-9]+(?:\.[0-9]{1,2})?)/gi)]
+    .map(m => Number(m[1])).filter(Number.isFinite);
+  const currency = [...normalized.matchAll(/(?:₹|INR|Rs\.?)[\s:]*([0-9]+(?:\.[0-9]{1,2})?)/gi)]
+    .map(m => Number(m[1])).filter(Number.isFinite);
+  return [...new Set([...explicit, ...currency])];
 }
 
-async function listMailboxes(client) {
-  // ImapFlow exposes LIST through client.list(); there is no listMailboxes() API.
+export function amountMatches(a, b) { return Number.isFinite(a) && Math.abs(Number(a) - Number(b)) < 0.005; }
+
+export function messageMatchesOrder(text, order) {
+  const id = String(order?.orderId || '').trim();
+  if (!id) return false;
+  const escaped = id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(?:^|[^A-Za-z0-9])${escaped}(?:[^A-Za-z0-9]|$)`).test(String(text || ''));
+}
+
+function messageIdentity(source) {
+  const raw = Buffer.isBuffer(source) ? source.toString('utf8') : String(source || '');
+  const messageId = raw.match(/^Message-ID:\s*<([^>]+)>/im)?.[1]?.trim();
+  if (messageId) return `gmail:${messageId}`;
+  return `gmail-sha256:${crypto.createHash('sha256').update(raw).digest('hex')}`;
+}
+
+export async function listMailboxes(client) {
   const boxes = await client.list();
   return [...new Set((boxes || []).map(box => ({
     path: box.path || box.name,
     flags: new Set(box.flags || [])
   })).filter(box => {
-    const lower = String(box.path || '').toLowerCase();
-    return box.path && !box.flags.has('\\Trash') && !box.flags.has('\\Junk') && !lower.includes('spam') && !lower.includes('trash');
+    const path = String(box.path || '');
+    const excludedBySpecialUse = box.flags.has('\\Trash') || box.flags.has('\\Junk');
+    const excludedByName = /(spam|junk|trash)/i.test(path);
+    return box.path && !excludedBySpecialUse && !excludedByName;
   }).map(box => box.path))];
 }
+
 async function withImap(connection, fn) {
   const client = new ImapFlow({ host: 'imap.gmail.com', port: 993, secure: true, auth: { user: emailOf(connection.email), pass: decryptSecret(connection.appPasswordEncrypted) }, logger: false, socketTimeout: 30000 });
   try { await client.connect(); return await fn(client); } finally { try { await client.logout(); } catch { try { client.close(); } catch {} } }
 }
+
 export async function testGmailAppPassword(email, appPassword) {
   const e = emailOf(email), p = appPassOf(appPassword);
   if (!/^[^@\s]+@gmail\.com$/i.test(e)) throw new Error('Use a valid @gmail.com address.');
@@ -62,6 +113,7 @@ export async function testGmailAppPassword(email, appPassword) {
   try { await client.connect(); return { email: e, folders: (await listMailboxes(client)).length }; }
   finally { try { await client.logout(); } catch { try { client.close(); } catch {} } }
 }
+
 export async function checkStoredGmailConnection(connection) {
   if (!connection?.email || !connection?.appPasswordEncrypted) throw new Error('Gmail App Password is not connected.');
   return withImap(connection, async client => ({ email: emailOf(connection.email), folders: (await listMailboxes(client)).length, connected: true, checkedAt: new Date() }));
@@ -80,7 +132,8 @@ async function verificationOrder(merchant) {
 export async function createVerificationOrder(merchant) { const o = await verificationOrder(merchant); return { orderId: o.orderId, amount: o.amount, paymentUrl: o.paymentUrl, expiresAt: o.expiresAt }; }
 
 async function claim({ merchant, order, messageId, source, receivedAt }) {
-  const text = extractText(source); if (!messageMatchesOrder(text, order)) return { confirmed: false, reason: 'order_id_mismatch' };
+  const text = extractText(source);
+  if (!messageMatchesOrder(text, order)) return { confirmed: false, reason: 'order_id_mismatch' };
   if (!extractAmounts(text).some(a => amountMatches(a, order.amount))) return { confirmed: false, reason: 'amount_mismatch' };
   const utr = extractUtr(text);
   if (utr) {
@@ -101,9 +154,14 @@ async function claim({ merchant, order, messageId, source, receivedAt }) {
 }
 
 async function searchMailbox(client, mailbox, order) {
-  const lock = await client.getMailboxLock(mailbox); try {
-    const uids = await client.search({ since: new Date(Date.now() - 365 * 86400000), text: String(order.orderId) }, { uid: true }); const out = [];
-    for (const uid of uids || []) { const msg = await client.fetchOne(uid, { source: true, internalDate: true }, { uid: true }); if (msg?.source) out.push({ id: `${mailbox}:${uid}`, source: msg.source, internalDate: msg.internalDate || new Date() }); }
+  const lock = await client.getMailboxLock(mailbox);
+  try {
+    const uids = await client.search({ since: new Date(Date.now() - VERIFICATION_SINCE_MS), text: String(order.orderId) }, { uid: true });
+    const out = [];
+    for (const uid of uids || []) {
+      const msg = await client.fetchOne(uid, { source: true, internalDate: true }, { uid: true });
+      if (msg?.source) out.push({ id: messageIdentity(msg.source), source: msg.source, internalDate: msg.internalDate || new Date() });
+    }
     return out;
   } finally { lock.release(); }
 }
