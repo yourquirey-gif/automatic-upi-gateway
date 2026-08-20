@@ -49,7 +49,17 @@ async function syncAdminSettlementMerchant(adminId) {
   return { ...ctx, merchant };
 }
 
-router.post('/test', requireAuth, async (req, res, next) => { try { const result = await testGmailAppPassword(req.body.email, req.body.appPassword); res.json({ status: true, ...result, authType: 'imap_app_password' }); } catch (e) { res.status(400).json({ status: false, message: e.message || 'Gmail connection failed' }); } });
+// The standalone Gmail test is intentionally admin-only here. The Admin panel
+// must never test or save a merchant/user Gmail as the settlement Gmail.
+router.post('/test', requireAuth, requireAdmin, async (req, res) => { try {
+  const ctx = await getAdminSettlementContext(req.auth.sub);
+  const suppliedEmail = safeEmail(req.body.email);
+  if (suppliedEmail && suppliedEmail !== ctx.email) return res.status(400).json({ status: false, message: `This is a user/merchant Gmail. Use the administrator Gmail address: ${ctx.email}` });
+  const appPassword = String(req.body.appPassword || '').replace(/\s+/g, '');
+  if (appPassword.length !== 16) return res.status(400).json({ status: false, message: 'Enter the 16-character App Password for the administrator Gmail.' });
+  const result = await testGmailAppPassword(ctx.email, appPassword);
+  res.json({ status: true, ...result, authType: 'imap_app_password', adminEmail: ctx.email, settlementUpiId: ctx.upiId });
+} catch (e) { res.status(e.statusCode || 400).json({ status: false, message: e.message || 'Gmail connection failed' }); } });
 
 router.post('/connect-merchant', requireAuth, async (req, res, next) => { try {
   const merchant = await Merchant.findOne({ _id: req.body.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } });
@@ -62,9 +72,7 @@ router.post('/connect-merchant', requireAuth, async (req, res, next) => { try {
 router.post('/connect-admin', requireAuth, requireAdmin, async (req, res, next) => { try {
   const ctx = await syncAdminSettlementMerchant(req.auth.sub);
   const suppliedEmail = safeEmail(req.body.email);
-  if (suppliedEmail && suppliedEmail !== ctx.email) {
-    return res.status(400).json({ status: false, message: `Use the administrator Gmail address: ${ctx.email}` });
-  }
+  if (suppliedEmail && suppliedEmail !== ctx.email) return res.status(400).json({ status: false, message: `This is a user/merchant Gmail. Use the administrator Gmail address: ${ctx.email}` });
   if (!req.body.appPassword) return res.status(400).json({ status: false, message: 'Enter the 16-character App Password for the administrator Gmail.' });
   const result = await connectMerchantGmail({ merchant: ctx.merchant, email: ctx.email, appPassword: req.body.appPassword });
   res.json({ status: true, ...result, merchantId: ctx.merchant._id, adminEmail: ctx.email, settlementUpiId: ctx.upiId });
