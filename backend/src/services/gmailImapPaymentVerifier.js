@@ -156,9 +156,13 @@ async function claim({ merchant, order, messageId, source, receivedAt }) {
 async function searchMailbox(client, mailbox, order) {
   const lock = await client.getMailboxLock(mailbox);
   try {
-    const uids = await client.search({ since: new Date(Date.now() - VERIFICATION_SINCE_MS), text: String(order.orderId) }, { uid: true });
+    const since = new Date(Date.now() - VERIFICATION_SINCE_MS);
+    const orderId = String(order.orderId);
+    const first = await client.search({ since, text: orderId }, { uid: true });
+    const body = first?.length ? [] : await client.search({ since, body: orderId }, { uid: true });
+    const uids = [...new Set([...(first || []), ...(body || [])])];
     const out = [];
-    for (const uid of uids || []) {
+    for (const uid of uids) {
       const msg = await client.fetchOne(uid, { source: true, internalDate: true }, { uid: true });
       if (msg?.source) out.push({ id: messageIdentity(msg.source), source: msg.source, internalDate: msg.internalDate || new Date() });
     }
@@ -183,7 +187,24 @@ export async function verifyMerchantVerificationPayment({ merchant, connection }
 }
 
 export async function verifyConnection(connection) {
-  const merchant = await Merchant.findById(connection.merchant); if (!merchant || merchant.status !== 'active' || merchant.verificationStatus !== 'verified') return { checked: 0, confirmed: 0 };
+  const merchant = await Merchant.findById(connection.merchant);
+  if (!merchant) return { checked: 0, confirmed: 0, reason: 'merchant_not_found' };
+
+  // A newly connected merchant is intentionally PENDING until the ₹1 Gmail
+  // verification succeeds. The old guard skipped these merchants entirely,
+  // which meant the automatic IDLE watcher could never verify the first test
+  // payment. Route both initial verification and normal pending-order checks
+  // through the same server-side Gmail scanner.
+  if (merchant.status !== 'active' || merchant.verificationStatus !== 'verified') {
+    if (merchant.verificationStatus === 'pending' && merchant.config?.verificationOrderId) {
+      const result = await verifyMerchantVerificationPayment({ merchant, connection });
+      connection.lastCheckedAt = new Date();
+      await connection.save();
+      return { checked: result.order ? 1 : 0, confirmed: result.verified ? 1 : 0, initialVerification: true };
+    }
+    return { checked: 0, confirmed: 0, reason: 'merchant_not_verified' };
+  }
+
   const pending = await Order.find({ merchant: merchant._id, owner: merchant.owner, status: 'PENDING', expiresAt: { $gt: new Date() } }).sort({ createdAt: 1 }).limit(500); if (!pending.length) return { checked: 0, confirmed: 0 };
   let checked = 0, confirmed = 0;
   await withImap(connection, async client => { for (const mailbox of await listMailboxes(client)) for (const order of pending) for (const msg of await searchMailbox(client, mailbox, order)) { checked++; const r = await claim({ merchant, order, messageId: msg.id, source: msg.source, receivedAt: msg.internalDate instanceof Date ? msg.internalDate : new Date() }); if (r.confirmed) { confirmed++; break; } } });
