@@ -11,13 +11,8 @@ const PAYMENT_LINK_TTL_MS = 5 * 60 * 1000;
 const SITE = String(process.env.PUBLIC_WEB_BASE_URL || 'https://omniupi.in').replace(/\/$/, '');
 const clean = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 
-function makeOrderId() {
-  return `ORD_${Date.now()}_${crypto.randomBytes(5).toString('hex')}`;
-}
-
-function paymentUrlFor(orderId) {
-  return `${SITE}/pay.html?order_id=${encodeURIComponent(orderId)}`;
-}
+function makeOrderId() { return `ORD_${Date.now()}_${crypto.randomBytes(5).toString('hex')}`; }
+function paymentUrlFor(orderId) { return `${SITE}/pay.html?order_id=${encodeURIComponent(orderId)}`; }
 
 async function createUniqueOrderId(requested) {
   let id = clean(requested, 100);
@@ -35,11 +30,11 @@ router.post('/payment-link', async (req, res, next) => {
     if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ status: false, message: 'Enter a valid positive amount.' });
     if (amount > 1000000) return res.status(400).json({ status: false, message: 'Amount exceeds the allowed limit.' });
 
-    const merchantQuery = { owner: req.auth.sub, status: 'active', verificationStatus: 'verified', upiId: { $exists: true, $nin: ['', null] }, provider: { $ne: 'admin_settlement' } };
+    const merchantQuery = { owner: req.auth.sub, status: 'active', upiId: { $exists: true, $nin: ['', null] }, provider: { $ne: 'admin_settlement' } };
     const requestedMerchantId = clean(req.body?.merchantId || req.body?.merchant_id, 100);
     if (requestedMerchantId) merchantQuery._id = requestedMerchantId;
     const merchant = await Merchant.findOne(merchantQuery).sort({ verifiedAt: -1, createdAt: -1 });
-    if (!merchant) return res.status(409).json({ status: false, message: 'No active Gmail-verified merchant UPI is available. Verify a merchant first.' });
+    if (!merchant) return res.status(409).json({ status: false, message: 'No active merchant UPI is available. Connect a merchant and save its UPI ID first.' });
 
     const amountFixed = Number(amount.toFixed(2));
     const orderId = await createUniqueOrderId(req.body?.orderId || req.body?.order_id);
