@@ -1,0 +1,21 @@
+/* Balanced medium typography for the existing Admin SaaS UI. */
+.app{font-size:12px}
+.nav-item{font-size:13px}
+.logout{font-size:12px}
+.topbar h2{font-size:19px}
+.content .panel h2,.content .panel h3{font-size:17px}
+.hero-admin h1{font-size:24px}
+.hero-admin p{font-size:13px}
+.toolbar h2{font-size:18px}
+.table-wrap th{font-size:10px}
+.table-wrap td{font-size:12px}
+.table-wrap td small{font-size:10px}
+.badge{font-size:10px}
+.small-btn,.secondary{font-size:11px}
+.primary{font-size:12px}
+.panel label,.editor label{font-size:11px}
+.panel input,.panel textarea,.panel select,.editor input,.editor textarea{font-size:13px}
+.muted{font-size:12px}
+.detail-grid small{font-size:10px}
+.detail-grid b{font-size:12px}
+@media(max-width:760px){.topbar h2{font-size:16px}.content .panel h2,.content .panel h3{font-size:16px}.hero-admin h1{font-size:20px}.hero-admin p{font-size:12px}.table-wrap td{font-size:11px}.panel label,.editor label{font-size:11px}.panel input,.panel textarea,.panel select,.editor input,.editor textarea{font-size:12px}}
