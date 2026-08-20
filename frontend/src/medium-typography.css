@@ -1,0 +1,34 @@
+/* OmniUPI application UI: medium, compact SaaS typography. */
+.dashboard-shell{font-size:14px}
+.dashboard-shell .dash-logo{font-size:22px}
+.dashboard-shell .trial-pill{font-size:12px;padding:9px 14px}
+.dashboard-shell .dash-welcome h1,.dashboard-shell .page-title h1{font-size:clamp(24px,3vw,28px);letter-spacing:-.7px}
+.dashboard-shell .dash-welcome p,.dashboard-shell .page-title p{font-size:14px;line-height:1.55}
+.dashboard-shell .primary-action,.dashboard-shell .green-btn,.dashboard-shell .purple-btn,.dashboard-shell .verify-main{font-size:13px;padding:11px 16px}
+.dashboard-shell .stat-card{padding:17px;border-radius:17px}
+.dashboard-shell .stat-card>span{font-size:11px}
+.dashboard-shell .stat-card>strong{font-size:22px;margin:6px 0}
+.dashboard-shell .stat-card>small{font-size:11px;padding:4px 7px}
+.dashboard-shell .card-heading h3{font-size:17px}
+.dashboard-shell .card-heading p{font-size:12px}
+.dashboard-shell .rate-legend{font-size:12px}
+.dashboard-shell .info-strip span{font-size:13px}
+.dashboard-shell .merchant-row{padding:12px 4px}
+.dashboard-shell .merchant-row span{font-size:11px}
+.dashboard-shell .settings-body select,.dashboard-shell .add-merchant-body select,.dashboard-shell .add-merchant-body input{height:48px;font-size:14px;padding:0 13px}
+.dashboard-shell .gradient-card-head h2{font-size:18px}
+.dashboard-shell .settings-body{padding:22px}
+.dashboard-shell .add-merchant-body{padding:22px}
+.dashboard-shell .merchant-table-wrap th{font-size:11px;padding:11px}
+.dashboard-shell .merchant-table-wrap td{font-size:11px;padding:11px}
+.dashboard-shell .drawer-title{font-size:11px;padding:21px 23px 9px}
+.dashboard-shell .drawer-item{font-size:13px;padding:12px 23px;gap:14px}
+.dashboard-shell .drawer-profile strong{font-size:15px}
+.dashboard-shell .drawer-profile span{font-size:12px}
+.dashboard-shell .simple-page h1{font-size:28px}
+@media(max-width:650px){
+  .dashboard-shell .dash-welcome h1,.dashboard-shell .page-title h1{font-size:24px}
+  .dashboard-shell .stat-card{padding:13px}
+  .dashboard-shell .stat-card>strong{font-size:19px}
+  .dashboard-shell .settings-body select,.dashboard-shell .add-merchant-body select,.dashboard-shell .add-merchant-body input{font-size:14px}
+}
