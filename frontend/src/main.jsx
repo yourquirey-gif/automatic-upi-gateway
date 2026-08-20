@@ -1,5 +1,6 @@
 import React,{useEffect,useState} from 'react';
 import {createRoot} from 'react-dom/client';
+import './landing-components.js';
 import App from './App.jsx';
 import GmailConnectMerchant from './GmailConnectMerchant.jsx';
 import OAuthBridge from './OAuthBridge.jsx';
