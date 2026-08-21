@@ -7,6 +7,7 @@ import { connectDatabase } from './config/database.js';
 import authRoutes from './routes/auth.js';
 import merchantRoutes from './routes/merchants.js';
 import adminRoutes from './routes/admin.js';
+import adminOperationsRoutes from './routes/adminOperations.js';
 import adminPaymentLinksRoutes from './routes/adminPaymentLinks.js';
 import subscriptionAdminRoutes from './routes/subscriptionAdmin.js';
 import gmailRoutes from './routes/gmail.js';
@@ -51,6 +52,7 @@ app.get('/robots.txt', (_req, res) => { res.type('text/plain').set('Cache-Contro
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/merchants', merchantRoutes);
 app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/admin/operations', adminOperationsRoutes);
 app.use('/api/v1/admin/payment-links', adminPaymentLinksRoutes);
 app.use('/api/v1/admin/subscriptions', subscriptionAdminRoutes);
 app.use('/api/v1/admin/blogs', adminBlogRoutes);
