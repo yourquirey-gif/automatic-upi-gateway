@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
 import GatewaySettings from '../models/GatewaySettings.js';
-import { verifyOrderWithGmail } from '../services/gmailPaymentVerifier.js';
+import { verifyPendingOrdersForAdmin } from '../services/gmailPaymentVerifier.js';
 
 const router = Router();
 function clean(v, max = 300) { return String(v ?? '').trim().slice(0, max); }
@@ -40,7 +40,7 @@ router.get('/:orderId/status', async (req, res, next) => {
     let order = await Order.findOne({ orderId: clean(req.params.orderId, 100) });
     if (!order) return res.status(404).json({ status: false, message: 'Order not found' });
     if (order.status === 'PENDING' && String(req.query.check || '') === '1') {
-      await verifyOrderWithGmail(order.orderId).catch(error => console.error('On-demand Gmail verification failed:', error.message));
+      await verifyPendingOrdersForAdmin(order.owner).catch(error => console.error('On-demand Gmail verification failed:', error.message));
       order = await Order.findById(order._id);
     }
     if (order.status === 'PENDING' && order.expiresAt && new Date(order.expiresAt).getTime() <= Date.now()) {
