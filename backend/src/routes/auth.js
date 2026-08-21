@@ -21,8 +21,6 @@ async function adminSettlementUpi(){const settings=await GatewaySettings.findOne
 router.post('/admin-login',async(req,res,next)=>{try{
   const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
   if(!email||!password)return res.status(400).json({status:false,message:'Administrator email and password are required'});
-  const configuredAdmin=String(process.env.ADMIN_EMAIL||'').trim().toLowerCase();
-  if(configuredAdmin&&email!==configuredAdmin)return res.status(403).json({status:false,message:'Administrator access denied'});
   const user=await User.findOne({email,role:'admin'}).select('+passwordHash +apiToken +instanceSecret');
   if(!user||user.status!=='active'||!(await bcrypt.compare(password,user.passwordHash||'')))return res.status(401).json({status:false,message:'Invalid administrator credentials'});
   let changed=false;if(!user.userId){user.userId=await nextUserId();changed=true;}if(!user.apiToken||!user.instanceSecret){const c=createApiCredentials();if(!user.apiToken)user.apiToken=c.apiToken;if(!user.instanceSecret)user.instanceSecret=c.instanceSecret;changed=true;}if(changed)await user.save({validateBeforeSave:false});
