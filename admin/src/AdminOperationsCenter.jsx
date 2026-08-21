@@ -6,12 +6,13 @@ const money=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:
 const Badge=({value})=><span className="badge">{String(value||'—').replaceAll('_',' ')}</span>;
 const Empty=({text})=><div className="empty">{text}</div>;
 
-export default function AdminOperationsCenter(){
-  const [tab,setTab]=useState('overview'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+export default function AdminOperationsCenter({initialTab='overview'}){
+  const [tab,setTab]=useState(initialTab),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   const [data,setData]=useState({overview:{},health:{},merchants:[],orders:[],failures:[],gmail:[],audit:[],notifications:[],settings:{},analytics:[],users:[],plans:[],tickets:[],apiUsage:[]});
   const load=async()=>{setBusy(true);setError('');try{const [overview,health,merchants,orders,failures,gmail,audit,notifications,settings,analytics,users,plans,tickets,apiUsage]=await Promise.all([
     adminApi('/operations/overview'),adminApi('/operations/health'),adminApi('/merchants?limit=200'),adminApi('/orders?limit=200'),adminApi('/operations/failures'),adminApi('/gmail/connections'),adminApi('/operations/audit'),adminApi('/operations/notifications'),adminApi('/operations/settings'),adminApi('/operations/analytics?days=30'),adminApi('/users?limit=100'),adminApi('/plans'),adminApi('/support/tickets'),adminApi('/operations/api-usage')
   ]);setData({overview:overview.overview||{},health:health.health||{},merchants:merchants.merchants||[],orders:orders.orders||[],failures:failures.failures||[],gmail:gmail.connections||[],audit:audit.logs||[],notifications:notifications.notifications||[],settings:settings.settings||{},analytics:analytics.series||[],users:users.users||[],plans:plans.plans||[],tickets:tickets.tickets||[],apiUsage:apiUsage.usage||[]});}catch(e){setError(e.message)}finally{setBusy(false)}};
+  useEffect(()=>{setTab(initialTab)},[initialTab]);
   useEffect(()=>{load()},[]);
   const action=async(fn,msg)=>{setBusy(true);setError('');try{await fn();setNotice(msg);await load()}catch(e){setError(e.message)}finally{setBusy(false)}};
   const tabs=[['overview','Overview',Activity],['merchants','Merchants',WalletCards],['gmail','Gmail Center',Mail],['payments','Payments',ClipboardList],['failures','Failure Center',FileWarning],['security','Security & Audit',ShieldCheck],['settings','Payment Settings',Server],['api','API Management',KeyRound],['notifications','Notifications',Wifi],['analytics','Analytics',BarChart3],['health','System Health',Database],['subscriptions','Subscriptions',Users],['support','Support',Ticket]];
