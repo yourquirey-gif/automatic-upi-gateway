@@ -1,0 +1,72 @@
+name: Integrate OmniUPI Admin Operations Center
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "admin/src/AdminOperationsCenter.jsx"
+      - "admin/src/operations.css"
+      - "backend/src/routes/adminOperations.js"
+      - "backend/src/models/AdminAuditLog.js"
+      - "backend/src/models/AdminNotification.js"
+      - ".github/workflows/admin-operations-integration.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  integrate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - name: Wire operations center into existing apps
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main = Path('admin/src/main.jsx')
+          s = main.read_text(encoding='utf-8')
+          s0 = s
+          if "import AdminOperationsCenter from './AdminOperationsCenter';" not in s:
+              s = s.replace("import './styles.css';", "import './styles.css';\nimport './operations.css';\nimport AdminOperationsCenter from './AdminOperationsCenter';", 1)
+          if "['operations','Operations Center',Activity]" not in s:
+              s = s.replace("['admins','Admin Management',UserCog],['system','System Settings',Settings]", "['admins','Admin Management',UserCog],['operations','Operations Center',Activity],['system','System Settings',Settings]", 1)
+          if "page==='operations'&&<AdminOperationsCenter/>" not in s:
+              s = s.replace("{page==='system'&&<SystemPage settings={data.settings} action={action}/>}", "{page==='operations'&&<AdminOperationsCenter/>} {page==='system'&&<SystemPage settings={data.settings} action={action}/>} ", 1)
+          if s == s0:
+              print('main.jsx already integrated')
+          else:
+              main.write_text(s, encoding='utf-8')
+              print('Updated admin/src/main.jsx')
+
+          server = Path('backend/src/server.js')
+          s = server.read_text(encoding='utf-8')
+          s0 = s
+          if "import adminOperationsRoutes from './routes/adminOperations.js';" not in s:
+              s = s.replace("import adminRoutes from './routes/admin.js';", "import adminRoutes from './routes/admin.js';\nimport adminOperationsRoutes from './routes/adminOperations.js';", 1)
+          if "app.use('/api/v1/admin/operations', adminOperationsRoutes);" not in s:
+              s = s.replace("app.use('/api/v1/admin', adminRoutes);", "app.use('/api/v1/admin', adminRoutes);\napp.use('/api/v1/admin/operations', adminOperationsRoutes);", 1)
+          if s == s0:
+              print('server.js already integrated')
+          else:
+              server.write_text(s, encoding='utf-8')
+              print('Updated backend/src/server.js')
+          PY
+      - name: Verify syntax
+        run: |
+          node --check backend/src/routes/adminOperations.js
+          node --check backend/src/models/AdminAuditLog.js
+          node --check backend/src/models/AdminNotification.js
+      - name: Commit integration
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin/src/main.jsx backend/src/server.js
+          git diff --cached --quiet && exit 0
+          git commit -m "feat: integrate premium admin operations center"
+          git push
