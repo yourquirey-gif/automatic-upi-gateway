@@ -8,6 +8,7 @@ function verified(m){return m?.verificationStatus==='verified' || (m?.status==='
 function ensurePremiumNav(){
   if(!location.hash.includes('dashboard'))return;
   document.querySelectorAll('.premium-nav').forEach(nav=>{
+    if(nav.classList.contains('mobile'))nav.style.paddingTop='20px';
     if(!nav.querySelector('[data-omni-premium-brand]')){
       const brand=document.createElement('button');
       brand.type='button';brand.dataset.omniPremiumBrand='1';brand.title='OmniUPI';
