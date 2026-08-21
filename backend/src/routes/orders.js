@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import mongoose from 'mongoose';
+import QRCode from 'qrcode';
 import Order from '../models/Order.js';
 import Merchant from '../models/Merchant.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -15,6 +16,7 @@ const clean = (v, max = 500) => String(v ?? '').trim().slice(0, max);
 
 function makeOrderId() { return `ORD_${Date.now()}_${crypto.randomBytes(5).toString('hex')}`; }
 function paymentUrlFor(orderId) { return `${SITE}/pay.html?order_id=${encodeURIComponent(orderId)}`; }
+function upiUrlFor(order, merchant) { return `upi://pay?${new URLSearchParams({ pa: clean(merchant.upiId,200), pn: clean(merchant.name || merchant.provider || 'Merchant',80), am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn: clean(order.remark1 || `Payment ${order.orderId}`,80) }).toString()}`; }
 
 async function createUniqueOrderId(requested) {
   let id = clean(requested, 100);
@@ -33,33 +35,17 @@ router.post('/payment-link', async (req, res, next) => {
     if (amount > 1000000) return res.status(400).json({ status: false, message: 'Amount exceeds the allowed limit.' });
 
     const ownerId = req.auth?.sub;
-    if (!ownerId || !mongoose.isValidObjectId(ownerId)) {
-      return res.status(401).json({ status: false, message: 'Invalid merchant session. Please login again.' });
-    }
+    if (!ownerId || !mongoose.isValidObjectId(ownerId)) return res.status(401).json({ status: false, message: 'Invalid merchant session. Please login again.' });
 
-    const merchantQuery = {
-      owner: ownerId,
-      status: 'active',
-      verificationStatus: 'verified',
-      upiId: { $exists: true, $nin: ['', null] },
-      provider: { $ne: 'admin_settlement' }
-    };
-
+    const merchantQuery = { owner: ownerId, status: 'active', verificationStatus: 'verified', upiId: { $exists: true, $nin: ['', null] }, provider: { $ne: 'admin_settlement' } };
     const requestedMerchantId = clean(req.body?.merchantId || req.body?.merchant_id, 100);
     if (requestedMerchantId) {
-      if (!mongoose.isValidObjectId(requestedMerchantId)) {
-        return res.status(400).json({ status: false, message: 'Invalid merchant ID. Please refresh Connect Merchant and try again.' });
-      }
+      if (!mongoose.isValidObjectId(requestedMerchantId)) return res.status(400).json({ status: false, message: 'Invalid merchant ID. Please refresh Connect Merchant and try again.' });
       merchantQuery._id = requestedMerchantId;
     }
 
     const merchant = await Merchant.findOne(merchantQuery).sort({ verifiedAt: -1, createdAt: -1 }).lean();
-    if (!merchant) {
-      return res.status(409).json({
-        status: false,
-        message: 'No Gmail-verified active merchant UPI is available. Connect and verify the merchant first.'
-      });
-    }
+    if (!merchant) return res.status(409).json({ status: false, message: 'No Gmail-verified active merchant UPI is available. Connect and verify the merchant first.' });
 
     const amountFixed = Number(amount.toFixed(2));
     let orderId = await createUniqueOrderId(req.body?.orderId || req.body?.order_id);
@@ -72,61 +58,23 @@ router.post('/payment-link', async (req, res, next) => {
     let order = null;
     for (let attempt = 0; attempt < 5; attempt++) {
       try {
-        order = await Order.create({
-          merchant: merchant._id,
-          owner: ownerId,
-          orderId,
-          amount: amountFixed,
-          customerMobile,
-          redirectUrl,
-          remark1: remark || `Payment ${orderId}`,
-          remark2,
-          status: 'PENDING',
-          feePercent: Number(merchant.planTransactionFeePercent || 0),
-          feeAmount: 0,
-          netAmount: amountFixed,
-          feeSettlementStatus: 'NOT_APPLICABLE',
-          verificationSource: 'gmail',
-          paymentUrl: paymentUrlFor(orderId),
-          expiresAt
-        });
+        order = await Order.create({ merchant: merchant._id, owner: ownerId, orderId, amount: amountFixed, customerMobile, redirectUrl, remark1: remark || `Payment ${orderId}`, remark2, status: 'PENDING', feePercent: Number(merchant.planTransactionFeePercent || 0), feeAmount: 0, netAmount: amountFixed, feeSettlementStatus: 'NOT_APPLICABLE', verificationSource: 'gmail', paymentUrl: paymentUrlFor(orderId), expiresAt });
         break;
       } catch (error) {
-        // A race on the unique Order ID must never become a generic 500.
-        if (error?.code === 11000 && attempt < 4) {
-          orderId = makeOrderId();
-          continue;
-        }
+        if (error?.code === 11000 && attempt < 4) { orderId = makeOrderId(); continue; }
         throw error;
       }
     }
-
     if (!order) throw new Error('Unable to create payment order. Please try again.');
 
-    return res.status(201).json({
-      status: true,
-      message: 'Payment link created successfully.',
-      result: {
-        orderId: order.orderId,
-        order_id: order.orderId,
-        amount: order.amount.toFixed(2),
-        status: order.status,
-        paymentUrl: order.paymentUrl,
-        payment_url: order.paymentUrl,
-        expiresAt: order.expiresAt,
-        expires_at: order.expiresAt,
-        expiresInSeconds: 300,
-        merchant: { id: merchant._id, name: merchant.name, upiId: merchant.upiId }
-      }
-    });
+    const paymentUpiUrl = upiUrlFor(order, merchant);
+    const qrDataUrl = await QRCode.toDataURL(paymentUpiUrl, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+
+    return res.status(201).json({ status: true, message: 'Payment link created successfully.', result: { orderId: order.orderId, order_id: order.orderId, amount: order.amount.toFixed(2), status: order.status, paymentUrl: order.paymentUrl, payment_url: order.paymentUrl, expiresAt: order.expiresAt, expires_at: order.expiresAt, expiresInSeconds: 300, qrDataUrl } });
   } catch (error) {
     console.error('[orders/payment-link] create failed:', error);
-    if (error?.name === 'ValidationError') {
-      return res.status(400).json({ status: false, message: `Payment order data is invalid: ${error.message}` });
-    }
-    if (error?.name === 'CastError') {
-      return res.status(400).json({ status: false, message: 'Invalid merchant or order data. Please refresh and try again.' });
-    }
+    if (error?.name === 'ValidationError') return res.status(400).json({ status: false, message: `Payment order data is invalid: ${error.message}` });
+    if (error?.name === 'CastError') return res.status(400).json({ status: false, message: 'Invalid merchant or order data. Please refresh and try again.' });
     next(error);
   }
 });
