@@ -13,7 +13,16 @@ const PAYMENT_LINK_TTL_MS = 5 * 60 * 1000;
 function getApiToken(req) { const authorization = String(req.headers.authorization || ''); if (/^Bearer\s+/i.test(authorization)) return authorization.replace(/^Bearer\s+/i, '').trim(); return String(req.body?.user_token || req.body?.api_token || req.headers['x-api-key'] || '').trim(); }
 async function requireApiUser(req, res, next) { try { const token = getApiToken(req); if (!token) return res.status(401).json({ status: false, message: 'API token is required' }); const user = await User.findOne({ apiToken: token, status: 'active', role: { $in: ['merchant','admin'] } }).select('+apiToken +instanceSecret webhookUrl userId name email role'); if (!user) return res.status(401).json({ status: false, message: 'Invalid or inactive API token' }); req.apiUser = user; next(); } catch (error) { next(error); } }
 function cleanString(value, max = 500) { return String(value ?? '').trim().slice(0, max); }
-function makeOrderId() { return `${Date.now()}${crypto.randomBytes(4).toString('hex')}`.slice(0, 24); }
+function makeOrderId() { return `${Date.now()}${crypto.randomBytes(6).toString('hex')}`.slice(0, 24); }
+async function createUniqueOrderId(requested) {
+  let id = cleanString(requested, 100);
+  if (!id) id = makeOrderId();
+  for (let attempt = 0; attempt < 8; attempt++) {
+    if (!(await Order.exists({ orderId: id }))) return id;
+    id = makeOrderId();
+  }
+  throw new Error('Unable to generate a unique order ID. Please try again.');
+}
 function buildPaymentUrl(_req, order) { return `${CANONICAL_SITE}/pay.html?order_id=${encodeURIComponent(order.orderId)}`; }
 function buildUpiUrl(order, merchant) { const pa = cleanString(merchant.upiId, 200), pn = cleanString(merchant.name || merchant.provider || 'Merchant', 80), tn = cleanString(order.remark1 || `Payment ${order.orderId}`, 80); return `upi://pay?${new URLSearchParams({ pa, pn, am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn }).toString()}`; }
 function checkoutConfig(merchant) { const c = merchant?.config?.checkout || {}; return { brandName: cleanString(c.brandName || merchant?.name || 'Merchant', 100), themeColor: /^#[0-9a-fA-F]{6}$/.test(c.themeColor || '') ? c.themeColor : '#0B95BD', instructions: cleanString(c.instructions || '', 3000), showQrCode: c.showQrCode !== false, showIntentButtons: c.showIntentButtons !== false, brandLogo: typeof c.brandLogo === 'string' ? c.brandLogo : '' }; }
@@ -33,11 +42,22 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
     const merchant = await Merchant.findOne(merchantQuery).sort({ createdAt: -1 });
     if (!merchant) return res.status(400).json({ status: false, message: 'No active merchant connection found. Verify the payment UPI first.' });
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Merchant UPI ID is not configured' });
-    const orderId = requestedOrderId || makeOrderId();
-    if (await Order.exists({ orderId })) return res.status(409).json({ status: false, message: 'order_id already exists' });
-    const amountFixed = Number(amount.toFixed(2)), feePercent = Number(merchant.planTransactionFeePercent || 0), expiresAt = new Date(Date.now() + PAYMENT_LINK_TTL_MS);
-    const order = await Order.create({ merchant: merchant._id, owner: req.apiUser._id, orderId, amount: amountFixed, customerMobile, redirectUrl, remark1, remark2, status: 'PENDING', feePercent, netAmount: amountFixed, feeSettlementStatus: 'NOT_APPLICABLE', verificationSource: 'gmail', paymentUrl: '', expiresAt });
-    order.paymentUrl = buildPaymentUrl(req, order); await order.save();
+
+    const amountFixed = Number(amount.toFixed(2));
+    let orderId = await createUniqueOrderId(requestedOrderId);
+    const expiresAt = new Date(Date.now() + PAYMENT_LINK_TTL_MS);
+    let order = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      try {
+        order = await Order.create({ merchant: merchant._id, owner: req.apiUser._id, orderId, amount: amountFixed, customerMobile, redirectUrl, remark1, remark2, status: 'PENDING', feePercent: Number(merchant.planTransactionFeePercent || 0), feeAmount: 0, netAmount: amountFixed, feeSettlementStatus: 'NOT_APPLICABLE', verificationSource: 'gmail', paymentUrl: buildPaymentUrl(req, { orderId }), expiresAt });
+        break;
+      } catch (error) {
+        if (error?.code === 11000 && attempt < 4) { orderId = makeOrderId(); continue; }
+        throw error;
+      }
+    }
+    if (!order) throw new Error('Unable to create payment order. Please try again.');
+
     const upiUrl = buildUpiUrl(order, merchant);
     const qrDataUrl = await QRCode.toDataURL(upiUrl, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
     res.status(201).json({ status: true, message: 'Order Created Successfully', result: { txnStatus: 'PENDING', orderId: order.orderId, order_id: order.orderId, amount: order.amount.toFixed(2), paymentUrl: order.paymentUrl, payment_url: order.paymentUrl, qrDataUrl, expiresAt: order.expiresAt, expires_at: order.expiresAt, expiresInSeconds: 300, redirectUrl: order.redirectUrl || null, customerMobile: order.customerMobile || null, remark1: order.remark1 || null, remark2: order.remark2 || null } });
@@ -74,7 +94,7 @@ router.get('/payment/:orderId', async (req, res, next) => {
     res.set('Cache-Control', 'no-store, max-age=0'); res.type('html').send(html);
   } catch (error) { next(error); }
 });
-function escapeHtml(v) { return String(v).replace(/[&<>"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c])); }
+function escapeHtml(v) { return String(v).replace(/[&<>\"']/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '\"':'&quot;', "'":'&#39;' }[c])); }
 function escapeAttr(v) { return escapeHtml(v).replace(/`/g, '&#96;'); }
 router.get('/health', (_req, res) => res.json({ status: true, service: 'OmniUPI Public API', version: '1.5', website: CANONICAL_SITE, api: CANONICAL_API, paymentLinkExpirySeconds: 300 }));
 export default router;
