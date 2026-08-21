@@ -1,0 +1,81 @@
+name: Expose all admin operations features
+
+on:
+  push:
+    branches: ["main"]
+    paths:
+      - "admin/src/main.jsx"
+      - "admin/src/AdminOperationsCenter.jsx"
+      - ".github/workflows/fix-admin-operations-navigation.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fix-navigation:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Expose every operations module in the admin sidebar
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          main = Path('admin/src/main.jsx')
+          s = main.read_text(encoding='utf-8')
+
+          old_nav = "const nav=[['dashboard','Dashboard',LayoutDashboard],['users','Users',Users],['merchants','Merchants',WalletCards],['orders','Orders / Transactions',ClipboardList],['payment-links','Payment Links',WalletCards],['plans','Subscriptions / Plans',CreditCard],['kyc','KYC',FileCheck],['gateway','Gateway Settings',Server],['gmail','Gmail / Verification',Mail],['videos','Videos',PlayCircle],['support','Support',Ticket],['developers','API / Developers',KeyRound],['admins','Admin Management',UserCog],['operations','Operations Center',Activity],['system','System Settings',Settings]];"
+          new_nav = "const nav=[['dashboard','Dashboard',LayoutDashboard],['users','Users',Users],['merchants','Merchants',WalletCards],['orders','Orders / Transactions',ClipboardList],['payment-links','Payment Links',WalletCards],['plans','Subscriptions / Plans',CreditCard],['kyc','KYC',FileCheck],['gateway','Gateway Settings',Server],['gmail','Gmail / Verification',Mail],['videos','Videos',PlayCircle],['support','Support',Ticket],['developers','API / Developers',KeyRound],['admins','Admin Management',UserCog],['ops-overview','Operations Overview',Activity],['ops-merchants','Operations · Merchants',WalletCards],['ops-gmail','Operations · Gmail Center',Mail],['ops-payments','Operations · Payments',ClipboardList],['ops-failures','Operations · Failure Center',AlertTriangle],['ops-security','Operations · Security & Audit',ShieldCheck],['ops-settings','Operations · Payment Settings',Server],['ops-api','Operations · API Management',KeyRound],['ops-notifications','Operations · Notifications',Ticket],['ops-analytics','Operations · Analytics',BarChart3],['ops-health','Operations · System Health',Database],['ops-subscriptions','Operations · Subscriptions',CreditCard],['ops-support','Operations · Support',Ticket],['system','System Settings',Settings]];"
+          if old_nav in s:
+              s = s.replace(old_nav, new_nav, 1)
+          elif "['ops-overview','Operations Overview',Activity]" not in s:
+              raise SystemExit('Expected admin navigation declaration was not found')
+
+          old_render = "{page==='operations'&&<AdminOperationsCenter/>}"
+          new_render = "{page==='ops-overview'&&<AdminOperationsCenter initialTab=\"overview\"/>} {page==='ops-merchants'&&<AdminOperationsCenter initialTab=\"merchants\"/>} {page==='ops-gmail'&&<AdminOperationsCenter initialTab=\"gmail\"/>} {page==='ops-payments'&&<AdminOperationsCenter initialTab=\"payments\"/>} {page==='ops-failures'&&<AdminOperationsCenter initialTab=\"failures\"/>} {page==='ops-security'&&<AdminOperationsCenter initialTab=\"security\"/>} {page==='ops-settings'&&<AdminOperationsCenter initialTab=\"settings\"/>} {page==='ops-api'&&<AdminOperationsCenter initialTab=\"api\"/>} {page==='ops-notifications'&&<AdminOperationsCenter initialTab=\"notifications\"/>} {page==='ops-analytics'&&<AdminOperationsCenter initialTab=\"analytics\"/>} {page==='ops-health'&&<AdminOperationsCenter initialTab=\"health\"/>} {page==='ops-subscriptions'&&<AdminOperationsCenter initialTab=\"subscriptions\"/>} {page==='ops-support'&&<AdminOperationsCenter initialTab=\"support\"/>}"
+          if old_render in s:
+              s = s.replace(old_render, new_render, 1)
+          elif "page==='ops-overview'&&<AdminOperationsCenter" not in s:
+              raise SystemExit('Expected operations render was not found')
+
+          main.write_text(s, encoding='utf-8')
+
+          ops = Path('admin/src/AdminOperationsCenter.jsx')
+          s = ops.read_text(encoding='utf-8')
+          if "export default function AdminOperationsCenter({initialTab='overview'})" not in s:
+              s = s.replace("export default function AdminOperationsCenter(){", "export default function AdminOperationsCenter({initialTab='overview'}){", 1)
+          s = s.replace("const [tab,setTab]=useState('overview'),[busy", "const [tab,setTab]=useState(initialTab),[busy", 1)
+          marker = "  useEffect(()=>{load()},[]);"
+          replacement = "  useEffect(()=>{setTab(initialTab)},[initialTab]);\n  useEffect(()=>{load()},[]);"
+          if "setTab(initialTab)" not in s:
+              s = s.replace(marker, replacement, 1)
+          ops.write_text(s, encoding='utf-8')
+
+          styles = Path('admin/src/styles.css')
+          if styles.exists():
+              css = styles.read_text(encoding='utf-8')
+              if '.nav{overflow-y:auto' not in css:
+                  css += "\n/* Keep the full admin navigation accessible on smaller screens. */\n.nav{overflow-y:auto;min-height:0;max-height:calc(100vh - 125px);padding-right:3px}\n"
+                  styles.write_text(css, encoding='utf-8')
+          PY
+
+      - name: Verify admin build
+        working-directory: admin
+        run: |
+          npm install
+          npm run build
+
+      - name: Commit fixes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin/src/main.jsx admin/src/AdminOperationsCenter.jsx admin/src/styles.css
+          git diff --cached --quiet && exit 0
+          git commit -m "fix: expose all operations features in admin sidebar"
+          git push
