@@ -1,0 +1,31 @@
+/* Public landing cleanup: pricing/subscription and Telegram widget must not appear. */
+.pricing-section,
+#pricing,
+section[class*="pricing"],
+section[id="pricing"]{display:none!important;height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important}
+.site-nav button[onclick*="pricing"],
+.site-nav a[href="#pricing"],
+.site-nav a[href*="pricing"]{display:none!important}
+.site-nav button:nth-child(2){display:none!important}
+.landing .footer button[onclick*="pricing"],
+.landing .footer a[href="#pricing"],
+.landing .footer a[href*="pricing"]{display:none!important}
+.landing .footer .pricing-link,
+.landing .footer .subscription-link,
+.landing .footer .free-forever-link{display:none!important}
+/* The floating Telegram/support CTA is not part of the public homepage. */
+.chat-btn,
+.telegram-btn,
+.telegram-widget,
+.telegram-popup,
+.telegram-banner,
+.telegram-float,
+[class*="telegram"],
+[id*="telegram"]{display:none!important;visibility:hidden!important;pointer-events:none!important}
+/* Hide legacy pricing/subscription cards even if a stale bundle injects them. */
+.plans-grid,
+.plan-card,
+.popular,
+.subscription-page,
+.subscription-card,
+.subscription-grid{display:none!important}
