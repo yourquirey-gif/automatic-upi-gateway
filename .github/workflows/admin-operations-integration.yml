@@ -56,17 +56,30 @@ jobs:
           else:
               server.write_text(s, encoding='utf-8')
               print('Updated backend/src/server.js')
+
+          admin = Path('backend/src/routes/admin.js')
+          s = admin.read_text(encoding='utf-8')
+          old = "const allowed=['status','kycStatus','planStatus','planExpiresAt','webhookUrl','name','mobile','companyName','location'];"
+          new = "const allowed=['status','kycStatus','plan','planStatus','planExpiresAt','webhookUrl','name','mobile','companyName','location'];"
+          if old in s:
+              admin.write_text(s.replace(old, new, 1), encoding='utf-8')
+              print('Enabled admin plan assignment in existing user update route')
+          elif new in s:
+              print('Admin plan assignment already enabled')
+          else:
+              raise SystemExit('Could not locate existing admin user patch allow-list; refusing unsafe edit')
           PY
       - name: Verify syntax
         run: |
           node --check backend/src/routes/adminOperations.js
           node --check backend/src/models/AdminAuditLog.js
           node --check backend/src/models/AdminNotification.js
+          node --check backend/src/routes/admin.js
       - name: Commit integration
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add admin/src/main.jsx backend/src/server.js
+          git add admin/src/main.jsx backend/src/server.js backend/src/routes/admin.js
           git diff --cached --quiet && exit 0
           git commit -m "feat: integrate premium admin operations center"
           git push
