@@ -17,7 +17,11 @@ export function requireAuth(req, res, next) {
 
 export async function requireAdmin(req, res, next) {
   try {
-    if (req.auth?.role !== 'admin' || !req.auth?.sub) return res.status(403).json({ status: false, message: 'Administrator access required' });
+    // The database is the source of truth for administrator access. Older JWTs
+    // can contain role=merchant when an account was promoted to admin later.
+    // In that case a valid token with the user's id must still be able to use
+    // the admin panel after the account has been promoted.
+    if (!req.auth?.sub) return res.status(403).json({ status: false, message: 'Administrator access required' });
     const user = await User.findOne({ _id: req.auth.sub, role: 'admin', status: 'active' }).select('_id role status email plan planStatus trialEndsAt planExpiresAt');
     if (!user) return res.status(403).json({ status: false, message: 'Administrator account is inactive or no longer authorized' });
     req.admin = user;
