@@ -49,6 +49,19 @@ async function syncAdminSettlementMerchant(adminId) {
   return { ...ctx, merchant };
 }
 
+// User/merchant Gmail credential test. This must stay separate from the
+// administrator-only /test endpoint because a normal merchant must be able
+// to validate their own Gmail App Password.
+router.post('/test-merchant', requireAuth, async (req, res) => { try {
+  const merchant = await Merchant.findOne({ _id: req.body.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } });
+  if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+  const email = safeEmail(req.body.email);
+  const appPassword = String(req.body.appPassword || '').replace(/\s+/g, '');
+  if (!email || !appPassword) return res.status(400).json({ status: false, message: 'Enter your Gmail email and Gmail App Password.' });
+  const result = await testGmailAppPassword(email, appPassword);
+  res.json({ status: true, ...result, authType: 'imap_app_password', merchantId: merchant._id });
+} catch (e) { res.status(e.statusCode || 400).json({ status: false, message: e.message || 'Gmail connection failed' }); } });
+
 // The standalone Gmail test is intentionally admin-only here. The Admin panel
 // must never test or save a merchant/user Gmail as the settlement Gmail.
 router.post('/test', requireAuth, requireAdmin, async (req, res) => { try {
@@ -80,7 +93,7 @@ router.post('/connect-admin', requireAuth, requireAdmin, async (req, res, next) 
 
 router.post('/check-connection/:merchantId', requireAuth, async (req, res, next) => { try {
   const merchant = await Merchant.findOne({ _id: req.params.merchantId, owner: req.auth.sub, provider: { $ne: 'admin_settlement' } });
-  if (!merchant) return res.status(404).json({ status: false, message: 'Merchant not found' });
+  if (!merchant) return res.status(404).json({ status: false, connected: false, message: 'Merchant not found' });
   const connection = await GmailConnection.findOne({ merchant: merchant._id, owner: req.auth.sub, active: true }).select('+appPasswordEncrypted');
   if (!connection) return res.status(400).json({ status: false, connected: false, message: 'Gmail App Password is not connected.' });
   const result = await checkStoredGmailConnection(connection);
