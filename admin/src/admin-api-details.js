@@ -6,50 +6,108 @@ async function call(path, options={}){
   const t=token(); if(t) headers.Authorization=`Bearer ${t}`;
   const r=await fetch(`${API_BASE}${path}`,{...options,headers,cache:'no-store'});
   const d=await r.json().catch(()=>({}));
-  if(!r.ok) throw new Error(d.message||'Unable to load administrator API details.');
+  if(!r.ok) throw new Error(d.message||'Unable to complete administrator request.');
   return d;
 }
-
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
-function copy(value){if(navigator.clipboard)navigator.clipboard.writeText(value);}
+function mask(){return '••••••••••••••••';}
 
-function openModal(){
-  if(document.getElementById('om-admin-api-modal')) return;
-  const modal=document.createElement('div'); modal.id='om-admin-api-modal';
-  modal.innerHTML=`<div class="om-api-backdrop"><div class="om-api-card"><div class="om-api-head"><div><span class="om-api-kicker">DEVELOPER ACCESS</span><h2>Admin API Details</h2><p>Unique API credentials for this administrator.</p></div><button class="om-api-close" data-close>×</button></div><div id="om-api-body"><div class="om-api-loading">Loading secure API credentials…</div></div></div></div>`;
-  document.body.appendChild(modal);
-  modal.querySelector('[data-close]').onclick=()=>modal.remove();
-  modal.querySelector('.om-api-backdrop').onclick=e=>{if(e.target===e.currentTarget)modal.remove();};
-  load(modal);
-}
+let active=false;
+let navObserver=null;
 
-async function load(modal){
-  const body=modal.querySelector('#om-api-body');
-  try{
-    const d=await call('/auth/admin-api-credentials'); const c=d.credentials||{};
-    body.innerHTML=`<div class="om-api-grid">
-      ${field('Admin User ID',c.userId,'userId')}
-      ${field('API Key / Token',c.apiToken,'apiToken',true)}
-      ${field('API Secret',c.instanceSecret,'instanceSecret',true)}
-      ${field('API Base URL',c.apiBaseUrl,'apiBase')}
+function panelMarkup(){
+  return `<div class="om-settings-wrap">
+    <div class="om-settings-head"><div><span class="om-settings-kicker">ADMIN ONLY · SECURE CONFIGURATION</span><h1>API &amp; Webhook Settings</h1><p>Configure the administrator API credentials and the existing payment webhook. Secrets are encrypted on the server and are never returned to browser JavaScript.</p></div><div class="om-settings-shield">🔒 Admin isolated</div></div>
+    <div id="om-settings-message" class="om-settings-message" hidden></div>
+    <div class="om-settings-grid">
+      <section class="om-settings-card">
+        <div class="om-card-title"><div><span>API CREDENTIALS</span><h3>OMNIUPI API</h3></div><b>ADMIN</b></div>
+        <label>OMNIUPI API<input id="om-api-input" type="text" autocomplete="off" spellcheck="false" placeholder="Enter OMNIUPI API"/></label>
+        <div id="om-api-saved" class="om-saved-row"><span>Saved value</span><code>${mask()}</code></div>
+        <label>OMNIUPI Instance Secret<div class="om-secret-input"><input id="om-secret-input" type="password" autocomplete="new-password" spellcheck="false" placeholder="Enter instance secret"/><button type="button" id="om-secret-toggle">Show</button></div></label>
+        <div id="om-secret-saved" class="om-saved-row"><span>Saved value</span><code>${mask()}</code></div>
+        <div class="om-security-note">The Instance Secret is stored with the existing AES-256-GCM secret-encryption mechanism. It is never stored in localStorage and never returned by an API response.</div>
+      </section>
+      <section class="om-settings-card">
+        <div class="om-card-title"><div><span>PAYMENT NOTIFICATION</span><h3>Webhook</h3></div><b>EXISTING SYSTEM</b></div>
+        <label>Webhook URL<input id="om-webhook-input" type="url" autocomplete="off" spellcheck="false" placeholder="https://example.com/webhook"/></label>
+        <div class="om-webhook-rule"><strong>When will it fire?</strong><p>Only after a payment order is actually marked <b>SUCCESS</b> by the existing Gmail payment verification flow using the exact Order ID and exact amount.</p><p>It will not fire when a QR is opened/scanned, a payment page is opened, or Gmail/UPI is merely connected.</p></div>
+        <div class="om-actions"><button id="om-save-settings" class="om-primary">✓ Save API Settings</button><button id="om-test-webhook" class="om-secondary">↗ Test Webhook</button></div>
+      </section>
     </div>
-    <div class="om-api-actions"><button class="om-api-secondary" data-regenerate>Regenerate Credentials</button><a class="om-api-primary" href="${esc(c.docsUrl||'https://omniupi.in/docs')}" target="_blank" rel="noopener">Open Documentation ↗</a></div>
-    <div class="om-api-note">⚠️ Keep the API Key and Secret private. The same API documentation and endpoints used by the User Panel apply to this administrator account.</div>`;
-    body.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{copy(b.dataset.copy);b.textContent='Copied ✓';setTimeout(()=>b.textContent='Copy',900);});
-    body.querySelector('[data-regenerate]').onclick=async()=>{
-      if(!confirm('Regenerate this administrator API token and secret? Existing integrations using the old credentials will stop working.')) return;
-      const btn=body.querySelector('[data-regenerate]');btn.disabled=true;btn.textContent='Regenerating…';
-      try{await call('/auth/admin-api-credentials/regenerate',{method:'POST',body:JSON.stringify({type:'both'})});await load(modal);}catch(e){alert(e.message);btn.disabled=false;btn.textContent='Regenerate Credentials';}
-    };
-  }catch(e){body.innerHTML=`<div class="om-api-error">${esc(e.message)}</div>`;}
+    <div class="om-current-config"><span>Current configuration</span><div><b>OMNIUPI API</b><code id="om-api-status">Not configured</code></div><div><b>Instance Secret</b><code id="om-secret-status">Not configured</code></div><div><b>Webhook</b><code id="om-webhook-status">Not configured</code></div></div>
+  </div>`;
 }
-function field(label,value,key,secret=false){return `<div class="om-api-field"><label>${esc(label)}</label><div><code>${esc(value||'Not generated')}</code><button data-copy="${esc(value||'')}">Copy</button></div></div>`;}
 
-function inject(){
-  if(document.getElementById('om-admin-api-launcher')) return;
-  const style=document.createElement('style');
-  style.textContent=`#om-admin-api-launcher{position:fixed;right:22px;bottom:22px;z-index:99990;border:0;border-radius:999px;padding:12px 17px;background:linear-gradient(135deg,#6269e8,#19b99a);color:#fff;font-weight:800;box-shadow:0 12px 28px #1720332b;cursor:pointer}#om-admin-api-modal{position:fixed;inset:0;z-index:100000}.om-api-backdrop{min-height:100%;display:grid;place-items:center;padding:20px;background:#1720338c}.om-api-card{width:min(680px,100%);background:#fff;border-radius:22px;box-shadow:0 25px 70px #17203355;overflow:hidden;font-family:Inter,system-ui,sans-serif}.om-api-head{display:flex;justify-content:space-between;gap:20px;padding:24px;border-bottom:1px solid #edf0f5}.om-api-kicker{font-size:11px;font-weight:900;color:#6269e8;letter-spacing:.12em}.om-api-head h2{margin:5px 0 4px;color:#172033}.om-api-head p{margin:0;color:#687384;font-size:13px}.om-api-close{border:0;background:#f3f5f8;border-radius:10px;width:38px;height:38px;font-size:25px;cursor:pointer}.om-api-grid{display:grid;grid-template-columns:1fr 1fr;gap:13px;padding:20px}.om-api-field label{display:block;font-size:11px;font-weight:800;color:#697386;margin-bottom:6px}.om-api-field>div{display:flex;gap:7px;align-items:center;background:#f7f9fb;border:1px solid #e6eaf0;border-radius:11px;padding:8px}.om-api-field code{font-size:11px;overflow:auto;white-space:nowrap;flex:1;color:#243044}.om-api-field button{border:0;background:#fff;border:1px solid #e1e5eb;border-radius:8px;padding:5px 8px;font-size:11px;cursor:pointer}.om-api-actions{display:flex;gap:10px;padding:0 20px 18px}.om-api-actions button,.om-api-actions a{border:0;border-radius:10px;padding:10px 13px;font-weight:800;text-decoration:none;font-size:12px;cursor:pointer}.om-api-primary{background:#6269e8;color:#fff}.om-api-secondary{background:#f1f3f7;color:#243044}.om-api-note,.om-api-loading,.om-api-error{margin:0 20px 20px;padding:13px;border-radius:11px;background:#f7f9fb;color:#687384;font-size:12px;line-height:1.6}.om-api-error{background:#fff0f0;color:#b43b3b}@media(max-width:650px){.om-api-grid{grid-template-columns:1fr}.om-api-actions{flex-direction:column}.om-api-card{max-height:92vh;overflow:auto}}`;
-  document.head.appendChild(style);
-  const button=document.createElement('button');button.id='om-admin-api-launcher';button.textContent='🔑 Admin API';button.onclick=openModal;document.body.appendChild(button);
+function showMessage(text,ok){const el=document.getElementById('om-settings-message');if(!el)return;el.hidden=false;el.className=`om-settings-message ${ok?'success':'failure'}`;el.textContent=`${ok?'✓':'✕'} ${text}`;}
+
+async function loadSettings(){
+  try{
+    const d=await call('/auth/admin-api-settings');
+    const s=d.settings||{};
+    const apiStatus=document.getElementById('om-api-status'),secretStatus=document.getElementById('om-secret-status'),webhookStatus=document.getElementById('om-webhook-status');
+    if(apiStatus)apiStatus.textContent=s.apiConfigured?'••••••••••••••••':'Not configured';
+    if(secretStatus)secretStatus.textContent=s.instanceSecretConfigured?'••••••••••••••••':'Not configured';
+    if(webhookStatus)webhookStatus.textContent=s.webhookUrl||'Not configured';
+    const webhook=document.getElementById('om-webhook-input');if(webhook&&s.webhookUrl)webhook.value=s.webhookUrl;
+    const apiSaved=document.getElementById('om-api-saved');if(apiSaved)apiSaved.querySelector('code').textContent=s.apiConfigured?'••••••••••••••••':'Not configured';
+    const secretSaved=document.getElementById('om-secret-saved');if(secretSaved)secretSaved.querySelector('code').textContent=s.instanceSecretConfigured?'••••••••••••••••':'Not configured';
+  }catch(e){showMessage(e.message,false);}
 }
-window.addEventListener('load',inject,{once:true});
+
+function wirePanel(){
+  const secret=document.getElementById('om-secret-input'),toggle=document.getElementById('om-secret-toggle');
+  toggle?.addEventListener('click',()=>{if(!secret)return;const showing=secret.type==='text';secret.type=showing?'password':'text';toggle.textContent=showing?'Show':'Hide';});
+  document.getElementById('om-save-settings')?.addEventListener('click',async()=>{
+    const api=document.getElementById('om-api-input')?.value.trim()||'';
+    const instanceSecret=document.getElementById('om-secret-input')?.value.trim()||'';
+    const webhookUrl=document.getElementById('om-webhook-input')?.value.trim()||'';
+    if(!api)return showMessage('API field is required.',false);
+    if(!instanceSecret)return showMessage('Instance Secret field is required.',false);
+    try{const u=new URL(webhookUrl);if(!['http:','https:'].includes(u.protocol))throw new Error();}catch{return showMessage('Invalid webhook URL. Use a valid HTTP/HTTPS URL.',false);}
+    const btn=document.getElementById('om-save-settings');btn.disabled=true;btn.textContent='Saving…';
+    try{
+      await call('/auth/admin-api-settings',{method:'POST',body:JSON.stringify({omniupiApi:api,instanceSecret,webhookUrl})});
+      document.getElementById('om-api-input').value='';document.getElementById('om-secret-input').value='';
+      showMessage('API credentials saved',true);await loadSettings();
+    }catch(e){showMessage(e.message,false);}finally{btn.disabled=false;btn.textContent='✓ Save API Settings';}
+  });
+  document.getElementById('om-test-webhook')?.addEventListener('click',async()=>{
+    const btn=document.getElementById('om-test-webhook');btn.disabled=true;btn.textContent='Testing…';
+    try{const d=await call('/auth/admin-api-settings/test-webhook',{method:'POST'});showMessage(d.message||'Webhook configured',true);}catch(e){showMessage(e.message,false);}finally{btn.disabled=false;btn.textContent='↗ Test Webhook';}
+  });
+  loadSettings();
+}
+
+function activate(){
+  const content=document.querySelector('.content');if(!content)return;
+  active=true;
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.remove('active'));
+  document.getElementById('om-admin-api-settings-nav')?.classList.add('active');
+  const title=document.querySelector('.topbar h2');if(title)title.textContent='API & Webhook Settings';
+  content.innerHTML=panelMarkup();
+  wirePanel();
+}
+
+function installNav(){
+  const nav=document.querySelector('.nav');if(!nav)return false;
+  if(!document.getElementById('om-admin-api-settings-nav')){
+    const button=document.createElement('button');button.id='om-admin-api-settings-nav';button.type='button';button.className='nav-item';button.innerHTML='<span style="font-size:17px;width:17px;text-align:center">🔐</span><span>API & Webhook Settings</span>';button.addEventListener('click',activate);nav.appendChild(button);
+  }
+  return true;
+}
+
+function boot(){
+  if(installNav()){
+    if(navObserver)navObserver.disconnect();
+    const nav=document.querySelector('.nav');
+    nav.addEventListener('click',e=>{if(!e.target.closest('#om-admin-api-settings-nav'))active=false;},{capture:true});
+    navObserver=new MutationObserver(()=>{installNav();});navObserver.observe(nav,{childList:true});
+  }else setTimeout(boot,250);
+}
+
+const style=document.createElement('style');
+style.textContent=`.om-settings-wrap{max-width:1100px;margin:0 auto}.om-settings-head{display:flex;justify-content:space-between;gap:20px;align-items:flex-start;margin-bottom:20px}.om-settings-kicker{font-size:11px;font-weight:900;letter-spacing:.12em;color:#6269e8}.om-settings-head h1{margin:5px 0 7px;font-size:30px;color:#172033}.om-settings-head p{margin:0;max-width:760px;color:#687384;line-height:1.6;font-size:13px}.om-settings-shield{background:#edfdf8;color:#087c60;border:1px solid #ccefe5;padding:10px 13px;border-radius:12px;font-size:12px;font-weight:800;white-space:nowrap}.om-settings-message{margin:0 0 18px;padding:13px 15px;border-radius:12px;font-weight:800;font-size:13px}.om-settings-message.success{background:#ecfbf5;color:#087c60;border:1px solid #c9efdf}.om-settings-message.failure{background:#fff1f1;color:#b33a3a;border:1px solid #f3d0d0}.om-settings-grid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.om-settings-card{background:#fff;border:1px solid #e7ebf1;border-radius:18px;padding:22px;box-shadow:0 8px 24px #1720330a}.om-card-title{display:flex;justify-content:space-between;gap:10px;align-items:flex-start;margin-bottom:20px}.om-card-title span{font-size:10px;letter-spacing:.1em;font-weight:900;color:#7a8596}.om-card-title h3{margin:4px 0 0;color:#172033;font-size:19px}.om-card-title>b{font-size:10px;background:#f0f2ff;color:#555fcb;border-radius:99px;padding:6px 9px}.om-settings-card label{display:block;font-size:12px;font-weight:850;color:#4f5b6d;margin:0 0 15px}.om-settings-card input{display:block;width:100%;box-sizing:border-box;margin-top:7px;border:1px solid #dfe5ed;border-radius:11px;padding:12px 13px;background:#fbfcfe;color:#172033;outline:none;font-size:13px}.om-settings-card input:focus{border-color:#7279e8;box-shadow:0 0 0 3px #7279e817}.om-secret-input{display:flex;gap:8px;margin-top:7px}.om-secret-input input{margin:0;flex:1}.om-secret-input button{border:1px solid #dfe5ed;background:#fff;border-radius:11px;padding:0 13px;font-weight:800;color:#596577;cursor:pointer}.om-saved-row{display:flex;align-items:center;justify-content:space-between;gap:12px;background:#f7f9fb;border:1px solid #edf0f4;border-radius:10px;padding:9px 11px;margin:-5px 0 16px;font-size:11px;color:#7a8595}.om-saved-row code{color:#29354a;font-weight:800}.om-security-note{background:#f6f7ff;border:1px solid #e5e7ff;border-radius:11px;padding:11px;color:#626b80;font-size:11px;line-height:1.6}.om-webhook-rule{background:#f7f9fb;border-radius:12px;padding:13px;margin:8px 0 18px;color:#687384;font-size:11px;line-height:1.6}.om-webhook-rule strong{color:#263247;font-size:12px}.om-webhook-rule p{margin:6px 0 0}.om-actions{display:flex;gap:10px;flex-wrap:wrap}.om-actions button{border:0;border-radius:11px;padding:11px 15px;font-weight:850;cursor:pointer}.om-actions button:disabled{opacity:.6;cursor:wait}.om-primary{background:linear-gradient(135deg,#6269e8,#19b99a);color:#fff}.om-secondary{background:#eef1f6;color:#263247}.om-current-config{margin-top:18px;background:#fff;border:1px solid #e7ebf1;border-radius:16px;padding:16px;display:grid;grid-template-columns:1.1fr 1fr 1fr 1.8fr;gap:12px;align-items:center}.om-current-config>span{font-size:11px;font-weight:900;color:#7a8595}.om-current-config>div{display:flex;flex-direction:column;gap:4px}.om-current-config b{font-size:10px;color:#7a8595}.om-current-config code{font-size:11px;color:#29354a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:850px){.om-settings-grid{grid-template-columns:1fr}.om-settings-head{flex-direction:column}.om-current-config{grid-template-columns:1fr 1fr}}@media(max-width:520px){.om-settings-head h1{font-size:24px}.om-current-config{grid-template-columns:1fr}.om-actions{flex-direction:column}.om-actions button{width:100%}}`;
+document.head.appendChild(style);
+
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',boot);else boot();
