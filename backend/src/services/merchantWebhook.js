@@ -1,8 +1,24 @@
 import crypto from 'crypto';
+import User from '../models/User.js';
+import { decryptSecret } from '../utils/secretBox.js';
+
+async function resolveWebhookSecret(user) {
+  if (user?.role !== 'admin') return String(user?.instanceSecret || '').trim();
+  if (user?.instanceSecretEncrypted) {
+    try { return decryptSecret(user.instanceSecretEncrypted); } catch { return ''; }
+  }
+  if (!user?._id) return '';
+  const admin = await User.findOne({ _id: user._id, role: 'admin', status: 'active' }).select('+instanceSecret +instanceSecretEncrypted');
+  if (!admin) return '';
+  if (admin.instanceSecretEncrypted) {
+    try { return decryptSecret(admin.instanceSecretEncrypted); } catch { return ''; }
+  }
+  return String(admin.instanceSecret || '').trim();
+}
 
 export async function sendMerchantWebhook(user, order) {
   const webhookUrl = String(user?.webhookUrl || '').trim();
-  const secret = String(user?.instanceSecret || '').trim();
+  const secret = await resolveWebhookSecret(user);
   if (!webhookUrl || !secret) return { sent: false, reason: 'webhook_not_configured' };
 
   const payload = JSON.stringify({
