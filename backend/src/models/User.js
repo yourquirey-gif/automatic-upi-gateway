@@ -17,6 +17,8 @@ const userSchema = new mongoose.Schema({
   whitelistedIps: { type: [String], default: [] },
   apiToken: { type: String, unique: true, sparse: true, select: false, index: true },
   instanceSecret: { type: String, unique: true, sparse: true, select: false },
+  omniupiApiEncrypted: { type: String, default: '', select: false },
+  instanceSecretEncrypted: { type: String, default: '', select: false },
   webhookUrl: { type: String, trim: true, default: '' },
   kycStatus: { type: String, enum: ['NOT_SUBMITTED', 'PENDING_PAYMENT', 'PENDING_REVIEW', 'VERIFIED', 'REJECTED'], default: 'NOT_SUBMITTED', index: true },
   kycVerifiedAt: { type: Date, default: null },
