@@ -8,6 +8,7 @@ import Merchant from '../models/Merchant.js';
 import GatewaySettings from '../models/GatewaySettings.js';
 import { nextUserId } from '../utils/userId.js';
 import { createGoogleClient } from '../services/googleAuth.js';
+import { encryptSecret, decryptSecret } from '../utils/secretBox.js';
 
 const router = Router();
 function signToken(user){const secret=process.env.JWT_SECRET;if(!secret)throw new Error('JWT_SECRET is not configured');return jwt.sign({sub:user._id.toString(),role:user.role},secret,{expiresIn:'7d'});}
@@ -17,26 +18,93 @@ async function googleEnabled(){const settings=await GatewaySettings.findOne({key
 function publicWeb(){return String(process.env.PUBLIC_WEB_BASE_URL||'https://omniupi.in').replace(/\/$/,'');}
 function normalizeUpi(value){return String(value||'').trim().toLowerCase();}
 async function adminSettlementUpi(){const settings=await GatewaySettings.findOne({key:'global'}).lean();return normalizeUpi(settings?.settlementUpiId);}
+function maskSecret(value){const v=String(value||'');return v ? '••••••••••••••••' : '';}
+function validWebhookUrl(value){try{const u=new URL(String(value||'').trim());return u.protocol==='http:'||u.protocol==='https:';}catch{return false;}}
+async function ensureAdminCredentials(user){
+  let changed=false;
+  if(!user.userId){user.userId=await nextUserId();changed=true;}
+  if(!user.apiToken){user.apiToken=createApiCredentials().apiToken;changed=true;}
+  if(!user.instanceSecretEncrypted){
+    const secret=String(user.instanceSecret||'').trim()||createApiCredentials().instanceSecret;
+    user.instanceSecretEncrypted=encryptSecret(secret);
+    user.instanceSecret='';
+    changed=true;
+  }
+  if(changed)await user.save({validateBeforeSave:false});
+  return user;
+}
+async function authenticatedAdmin(req){const auth=String(req.headers.authorization||'');if(!/^Bearer\s+/i.test(auth))return null;let payload;try{payload=jwt.verify(auth.replace(/^Bearer\s+/i,'').trim(),process.env.JWT_SECRET);}catch{return null;}if(payload?.role!=='admin'||!payload?.sub)return null;const user=await User.findOne({_id:payload.sub,role:'admin',status:'active'}).select('+apiToken +instanceSecret +instanceSecretEncrypted +omniupiApiEncrypted userId webhookUrl');if(!user)return null;return ensureAdminCredentials(user);}
+function adminApiResponse(user){return {userId:user.userId,apiConfigured:!!user.apiToken||!!user.omniupiApiEncrypted,apiMasked:maskSecret(user.apiToken),instanceSecretConfigured:!!user.instanceSecretEncrypted||!!user.instanceSecret,instanceSecretMasked:maskSecret('configured'),webhookUrl:user.webhookUrl||'',apiBaseUrl:'https://api.omniupi.in/api',docsUrl:'https://omniupi.in/docs',role:'admin'};}
 
 router.post('/admin-login',async(req,res,next)=>{try{
   const email=String(req.body.email||'').trim().toLowerCase(),password=String(req.body.password||'');
   if(!email||!password)return res.status(400).json({status:false,message:'Administrator email and password are required'});
-  const user=await User.findOne({email,role:'admin'}).select('+passwordHash +apiToken +instanceSecret');
+  const user=await User.findOne({email,role:'admin'}).select('+passwordHash +apiToken +instanceSecret +instanceSecretEncrypted +omniupiApiEncrypted userId webhookUrl');
   if(!user||user.status!=='active'||!(await bcrypt.compare(password,user.passwordHash||'')))return res.status(401).json({status:false,message:'Invalid administrator credentials'});
-  let changed=false;if(!user.userId){user.userId=await nextUserId();changed=true;}if(!user.apiToken||!user.instanceSecret){const c=createApiCredentials();if(!user.apiToken)user.apiToken=c.apiToken;if(!user.instanceSecret)user.instanceSecret=c.instanceSecret;changed=true;}if(changed)await user.save({validateBeforeSave:false});
-  return res.json({status:true,token:signToken(user),subscription:{required:false,active:true,permanent:true},user:{id:user._id,userId:user.userId,name:user.name,email:user.email,role:'admin'},api:{userId:user.userId,apiToken:user.apiToken,instanceSecret:user.instanceSecret,apiBaseUrl:'https://api.omniupi.in/api',docsUrl:'https://omniupi.in/docs'}});
+  await ensureAdminCredentials(user);
+  return res.json({status:true,token:signToken(user),subscription:{required:false,active:true,permanent:true},user:{id:user._id,userId:user.userId,name:user.name,email:user.email,role:'admin'}});
 }catch(e){next(e)}});
 
-async function authenticatedAdmin(req){const auth=String(req.headers.authorization||'');if(!/^Bearer\s+/i.test(auth))return null;let payload;try{payload=jwt.verify(auth.replace(/^Bearer\s+/i,'').trim(),process.env.JWT_SECRET);}catch{return null;}if(payload?.role!=='admin'||!payload?.sub)return null;return User.findOne({_id:payload.sub,role:'admin',status:'active'}).select('+apiToken +instanceSecret userId webhookUrl');}
-function adminApiResponse(user){return {userId:user.userId,apiToken:user.apiToken,instanceSecret:user.instanceSecret,webhookUrl:user.webhookUrl||'',apiBaseUrl:'https://api.omniupi.in/api',docsUrl:'https://omniupi.in/docs',role:'admin'};}
-router.get('/admin-api-credentials',async(req,res,next)=>{try{const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});let changed=false;if(!user.userId){user.userId=await nextUserId();changed=true;}if(!user.apiToken||!user.instanceSecret){const c=createApiCredentials();if(!user.apiToken)user.apiToken=c.apiToken;if(!user.instanceSecret)user.instanceSecret=c.instanceSecret;changed=true;}if(changed)await user.save({validateBeforeSave:false});return res.json({status:true,credentials:adminApiResponse(user)});}catch(e){next(e)}});
-router.post('/admin-api-credentials/regenerate',async(req,res,next)=>{try{const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});const type=String(req.body?.type||'both').toLowerCase();if(!['token','secret','both'].includes(type))return res.status(400).json({status:false,message:'Invalid credential type'});if(type==='token'||type==='both')user.apiToken=createApiCredentials().apiToken;if(type==='secret'||type==='both')user.instanceSecret=createApiCredentials().instanceSecret;if(!user.userId)user.userId=await nextUserId();await user.save({validateBeforeSave:false});return res.json({status:true,message:'Admin API credentials regenerated successfully',credentials:adminApiResponse(user)});}catch(e){next(e)}});
+router.get('/admin-api-settings',async(req,res,next)=>{try{
+  const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});
+  return res.json({status:true,settings:adminApiResponse(user)});
+}catch(e){next(e)}});
+
+router.post('/admin-api-settings',async(req,res,next)=>{try{
+  const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});
+  const omniupiApi=String(req.body?.omniupiApi||req.body?.OMNIUPI_API||'').trim();
+  const instanceSecret=String(req.body?.instanceSecret||req.body?.OMNIUPI_INSTANCE_SECRET||'').trim();
+  const webhookUrl=String(req.body?.webhookUrl||'').trim();
+  if(!omniupiApi)return res.status(400).json({status:false,message:'OMNIUPI API is required'});
+  if(!instanceSecret)return res.status(400).json({status:false,message:'OMNIUPI Instance Secret is required'});
+  if(!validWebhookUrl(webhookUrl))return res.status(400).json({status:false,message:'Invalid webhook URL. Use a valid HTTP/HTTPS URL.'});
+  user.apiToken=omniupiApi;
+  user.omniupiApiEncrypted=encryptSecret(omniupiApi);
+  user.instanceSecretEncrypted=encryptSecret(instanceSecret);
+  user.instanceSecret='';
+  user.webhookUrl=webhookUrl;
+  await user.save({validateBeforeSave:false});
+  return res.json({status:true,message:'API credentials saved',settings:adminApiResponse(user)});
+}catch(e){if(e?.code===11000)return res.status(409).json({status:false,message:'OMNIUPI API value is already in use. Please use a unique API value.'});next(e)}});
+
+router.post('/admin-api-settings/test-webhook',async(req,res,next)=>{try{
+  const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});
+  const webhookUrl=String(user.webhookUrl||'').trim();
+  if(!validWebhookUrl(webhookUrl))return res.status(400).json({status:false,message:'Invalid webhook URL'});
+  let secret='';
+  try{secret=decryptSecret(user.instanceSecretEncrypted);}catch{secret=String(user.instanceSecret||'').trim();}
+  if(!secret)return res.status(400).json({status:false,message:'OMNIUPI Instance Secret is not configured'});
+  const payload=JSON.stringify({status:'TEST',order_id:'OMNIUPI_WEBHOOK_TEST',customer_mobile:'',amount:'0.00',utr:'',remark1:'Webhook configuration test',remark2:'OmniUPI Admin',timestamp:Math.floor(Date.now()/1000)});
+  const signature=crypto.createHmac('sha256',secret).update(payload).digest('hex');
+  const controller=new AbortController();const timeout=setTimeout(()=>controller.abort(),8000);
+  try{
+    const response=await fetch(webhookUrl,{method:'POST',headers:{'Content-Type':'application/json','X-Webhook-Signature':signature,'X-Webhook-Event':'webhook.test'},body:payload,signal:controller.signal});
+    clearTimeout(timeout);
+    if(!response.ok)return res.status(502).json({status:false,message:`Webhook returned HTTP ${response.status}`});
+    return res.json({status:true,message:'Webhook configured and test delivered'});
+  }catch(error){clearTimeout(timeout);return res.status(502).json({status:false,message:error?.name==='AbortError'?'Webhook request timed out':`Webhook request failed: ${error?.message||'network error'}`});}
+}catch(e){next(e)}});
+
+router.get('/admin-api-credentials',async(req,res,next)=>{try{
+  const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});
+  return res.json({status:true,credentials:adminApiResponse(user)});
+}catch(e){next(e)}});
+
+router.post('/admin-api-credentials/regenerate',async(req,res,next)=>{try{
+  const user=await authenticatedAdmin(req);if(!user)return res.status(401).json({status:false,message:'Administrator authentication required'});
+  const type=String(req.body?.type||'both').toLowerCase();if(!['token','secret','both'].includes(type))return res.status(400).json({status:false,message:'Invalid credential type'});
+  if(type==='token'||type==='both'){const token=createApiCredentials().apiToken;user.apiToken=token;user.omniupiApiEncrypted=encryptSecret(token);}
+  if(type==='secret'||type==='both'){user.instanceSecretEncrypted=encryptSecret(createApiCredentials().instanceSecret);user.instanceSecret='';}
+  if(!user.userId)user.userId=await nextUserId();
+  await user.save({validateBeforeSave:false});
+  return res.json({status:true,message:'Admin API credentials regenerated successfully',credentials:adminApiResponse(user)});
+}catch(e){next(e)}});
 
 router.get('/google/config',async(_req,res,next)=>{try{res.json({status:true,enabled:await googleEnabled()});}catch(e){next(e)}});
 router.get('/google',async(req,res,next)=>{try{if(!await googleEnabled())return res.status(404).send('Google sign-up is currently disabled.');const client=await createGoogleClient();const mode=['login','signup'].includes(String(req.query.mode))?String(req.query.mode):'login';const state=jwt.sign({purpose:'google-auth',mode},process.env.JWT_SECRET,{expiresIn:'10m'});res.redirect(client.generateAuthUrl({access_type:'offline',prompt:'select_account',state,scope:['openid','email','profile']}));}catch(e){next(e)}});
 
 router.get('/google/merchant',async(req,res,next)=>{try{
-  if(!await googleEnabled())return res.status(404).send('Google OAuth is currently disabled.');
+  if(!await googleEnabled())return res.status(404).send('Google sign-up is currently disabled.');
   const upi=normalizeUpi(req.query.upi),mobile=String(req.query.mobile||'').replace(/\D/g,'');
   if(!upi||!mobile||mobile.length!==10)return res.status(400).send('Valid UPI ID and 10-digit mobile number are required.');
   const adminUpi=await adminSettlementUpi();
@@ -81,7 +149,7 @@ router.get('/google/callback',async(req,res,next)=>{try{
   }
 
   const adminUpi=await adminSettlementUpi();
-  if(user.role!=='admin'&&adminUpi&&normalizeUpi(payload.upi)===adminUpi)return res.status(403).send('This UPI ID is reserved for the administrator. Please use your own merchant UPI ID.');
+  if(user.role!=='admin'&&adminUpi&&normalizeUpi(payload.upi)===adminUpi)return res.status(403).send('This UPI ID is reserved for the administrator. Please enter your own merchant UPI ID.');
 
   let merchant=await Merchant.findOne({owner:user._id,upiId:payload.upi});
   if(merchant?.provider==='admin_settlement'&&user.role!=='admin')return res.status(403).send('Admin Settlement UPI cannot be used by a normal merchant account.');
