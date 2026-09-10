@@ -16,31 +16,30 @@ jobs:
           fetch-depth: 1
 
       - name: Wire existing feature components into dashboard
-        shell: python
         run: |
+          python3 <<'PY'
           from pathlib import Path
           p = Path('frontend/src/App.jsx')
           s = p.read_text()
 
           old_import = "import {login,logout,register} from './api';"
           new_import = """import {login,logout,register} from './api';
-import Transactions from './Transactions.jsx';
-import SubscriptionPage from './SubscriptionPage.jsx';
-import AccountPage from './AccountPage.jsx';
-import PasswordPage from './PasswordPage.jsx';
-import KycPage from './KycPage.jsx';
-import ApiPage from './ApiPage.jsx';
-import MerchantApkPage from './MerchantApkPage.jsx';
-import VideoMerchant from './VideoMerchant.jsx';
-import Documentation from './Documentation.jsx';
-import SupportTicketPage from './SupportTicketPage.jsx';
-import FaqPage from './FaqPage.jsx';"""
+          import Transactions from './Transactions.jsx';
+          import SubscriptionPage from './SubscriptionPage.jsx';
+          import AccountPage from './AccountPage.jsx';
+          import PasswordPage from './PasswordPage.jsx';
+          import KycPage from './KycPage.jsx';
+          import ApiPage from './ApiPage.jsx';
+          import MerchantApkPage from './MerchantApkPage.jsx';
+          import VideoMerchant from './VideoMerchant.jsx';
+          import Documentation from './Documentation.jsx';
+          import SupportTicketPage from './SupportTicketPage.jsx';
+          import FaqPage from './FaqPage.jsx';"""
           if old_import in s and "import ApiPage from './ApiPage.jsx';" not in s:
-              s = s.replace(old_import, new_import, 1)
+              s = s.replace(old_import, new_import.replace('          import','import'), 1)
 
           replacements = {
             "{page==='transactions'&&<SimplePage icon={TrendingUp} title=\"Transactions\" text=\"Your transaction history will appear here.\"/>}": "{page==='transactions'&&<Transactions onBack={()=>openPage('home')}/>}",
-            "{page==='checkout'&&<SimplePage icon={Pencil} title=\"Edit Checkout Page\" text=\"Customize your customer checkout experience here.\"/>}": "{page==='checkout'&&<SimplePage icon={Pencil} title=\"Edit Checkout Page\" text=\"Customize your customer checkout experience here.\"/>}",
             "{page==='subscription'&&<SimplePage icon={CreditCard} title=\"Subscription\" text=\"Manage your subscription here.\"/>}": "{page==='subscription'&&<SubscriptionPage/>}",
             "{page==='account'&&<SimplePage icon={UserRound} title=\"Account & IP Whitelist\" text=\"Manage account access and approved IP addresses.\"/>}": "{page==='account'&&<AccountPage/>}",
             "{page==='password'&&<SimplePage icon={KeyRound} title=\"Change Password\" text=\"Change your dashboard password securely.\"/>}": "{page==='password'&&<PasswordPage/>}",
@@ -51,11 +50,10 @@ import FaqPage from './FaqPage.jsx';"""
             "{page==='support'&&<SimplePage icon={MessageSquare} title=\"Support Ticket\" text=\"Create and manage support tickets here.\"/>}": "{page==='support'&&<SupportTicketPage/>}",
             "{page==='faq'&&<SimplePage icon={HelpCircle} title=\"FAQ\" text=\"Frequently asked questions will appear here.\"/>}": "{page==='faq'&&<FaqPage/>}",
           }
-          for a,b in replacements.items():
-              if a in s:
-                  s = s.replace(a,b,1)
-
+          for a, b in replacements.items():
+              s = s.replace(a, b, 1)
           p.write_text(s)
+          PY
 
       - name: Commit patch
         run: |
