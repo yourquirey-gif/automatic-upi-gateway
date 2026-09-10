@@ -50,7 +50,7 @@ jobs:
             "{page==='video'&&<SimplePage icon={ExternalLink} title=\"Video For Merchant\" text=\"Merchant setup videos will appear here.\"/>}": "{page==='video'&&<VideoMerchant/>}",
             "{page==='docs'&&<SimplePage icon={FileText} title=\"Documentation\" text=\"API and integration documentation will appear here.\"/>}": "{page==='docs'&&<Documentation/>}",
             "{page==='support'&&<SimplePage icon={MessageSquare} title=\"Support Ticket\" text=\"Create and manage support tickets here.\"/>}": "{page==='support'&&<SupportTicketPage/>}",
-            "{page==='faq'&&<SimplePage icon={HelpCircle} title=\"FAQ\" text=\"Frequently asked questions will appear here.\"/>}": "{page==='faq'&&<FaqPage/>}",
+            "{page==='faq'&&<SimplePage icon={HelpCircle} title=\"FAQ\" text=\"Frequently asked questions will appear here.\"/>": "{page==='faq'&&<FaqPage/>}",
           }
           for a, b in replacements.items():
               s = s.replace(a, b, 1)
@@ -73,11 +73,14 @@ jobs:
           new_nav = "{item('developers','API & Developers',Code2)}{item('business','Business Profile',UserRound)}<button onClick={()=>{go('legacy:subscription');close?.()}}><CreditCard size={17}/><span>Subscription</span></button><button onClick={()=>{go('legacy:payment-link');close?.()}}><Link2 size={17}/><span>Payment Links</span></button>{item('video','Video Tutorials',BookOpen)}"
           s = s.replace(old_nav, new_nav, 1)
 
-          # Remove accidental duplicate video navigation/page branches while
-          # preserving exactly one existing VideoMerchant integration.
-          duplicate_nav = "{item('video','Video Tutorials',BookOpen)}{item('video','Video Tutorials',BookOpen)}{item('video','Video Tutorials',BookOpen)}"
-          s = s.replace(duplicate_nav, "{item('video','Video Tutorials',BookOpen)}")
-          s = s.replace(":section==='video'?<VideoMerchant/>:section==='video'?<VideoMerchant/>:section==='video'?<VideoMerchant/>:", ":section==='video'?<VideoMerchant/>:")
+          # Collapse any repeated video navigation entries to one.
+          video_nav = "{item('video','Video Tutorials',BookOpen)}"
+          while video_nav + video_nav in s:
+              s = s.replace(video_nav + video_nav, video_nav)
+          # Collapse any repeated video page branches to one.
+          video_page = ":section==='video'?<VideoMerchant/>:"
+          while video_page + video_page in s:
+              s = s.replace(video_page + video_page, video_page)
 
           p.write_text(s)
           PY
