@@ -1,0 +1,54 @@
+name: Fix admin video settings
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-admin-video:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Wire full VideoSettings component
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('admin/src/main.jsx')
+          s = p.read_text()
+
+          if "import VideoSettings from './VideoSettings.jsx';" not in s:
+              marker = "import AdminOperationsCenter from './AdminOperationsCenter';"
+              if marker not in s:
+                  raise SystemExit('AdminOperationsCenter import marker not found')
+              s = s.replace(marker, marker + "\nimport VideoSettings from './VideoSettings.jsx';", 1)
+
+          pattern = r"function VideosPage\(\{videos,action\}\)\{.*?\n\}"
+          replacement = "function VideosPage(){return <VideoSettings onMessage={(msg)=>window.alert(msg)}/>;}"
+          s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
+          if n != 1:
+              raise SystemExit(f'Expected exactly one VideosPage function, found {n}')
+
+          p.write_text(s)
+          PY
+
+      - name: Commit patch
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add admin/src/main.jsx .github/workflows/fix-admin-video-settings.yml
+          if git diff --cached --quiet; then
+            echo "No changes needed"
+            exit 0
+          fi
+          git commit -m "fix: wire full admin video settings and persistent deletion"
+          git push
