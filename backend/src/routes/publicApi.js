@@ -5,24 +5,27 @@ import User from '../models/User.js';
 import Merchant from '../models/Merchant.js';
 import Order from '../models/Order.js';
 import { verifyPendingOrdersForAdmin } from '../services/gmailPaymentVerifier.js';
+import { hashCredential, encryptCredential } from '../utils/credentialVault.js';
 
 const router = Router();
 const CANONICAL_SITE = 'https://omniupi.in';
 const CANONICAL_API = 'https://api.omniupi.in';
 const PAYMENT_LINK_TTL_MS = 5 * 60 * 1000;
 function getApiToken(req) { const authorization = String(req.headers.authorization || ''); if (/^Bearer\s+/i.test(authorization)) return authorization.replace(/^Bearer\s+/i, '').trim(); return String(req.body?.user_token || req.body?.api_token || req.headers['x-api-key'] || '').trim(); }
-async function requireApiUser(req, res, next) { try { const token = getApiToken(req); if (!token) return res.status(401).json({ status: false, message: 'API token is required' }); const user = await User.findOne({ apiToken: token, status: 'active', role: { $in: ['merchant','admin'] } }).select('+apiToken +instanceSecret webhookUrl userId name email role'); if (!user) return res.status(401).json({ status: false, message: 'Invalid or inactive API token' }); req.apiUser = user; next(); } catch (error) { next(error); } }
+async function requireApiUser(req, res, next) { try {
+  const token = getApiToken(req); if (!token) return res.status(401).json({ status: false, message: 'API token is required' });
+  const tokenHash = hashCredential(token);
+  let user = await User.findOne({ apiTokenHash: tokenHash, status: 'active', role: { $in: ['merchant','admin'] } }).select('+apiTokenHash +apiToken +apiTokenEncrypted +instanceSecretEncrypted +instanceSecret webhookUrl userId name email role');
+  if (!user) user = await User.findOne({ apiToken: token, status: 'active', role: { $in: ['merchant','admin'] } }).select('+apiTokenHash +apiToken +apiTokenEncrypted +instanceSecretEncrypted +instanceSecret webhookUrl userId name email role');
+  if (!user) return res.status(401).json({ status: false, message: 'Invalid or inactive API token' });
+  // One-way hash is used for lookup; encrypted copy is retained server-side only
+  // when a secret must be recovered for an internal operation.
+  if (!user.apiTokenHash) { user.apiTokenHash = tokenHash; user.apiTokenEncrypted = encryptCredential(token); user.apiToken = undefined; await user.save({ validateBeforeSave: false }); }
+  req.apiUser = user; next();
+} catch (error) { next(error); } }
 function cleanString(value, max = 500) { return String(value ?? '').trim().slice(0, max); }
 function makeOrderId() { return `${Date.now()}${crypto.randomBytes(6).toString('hex')}`.slice(0, 24); }
-async function createUniqueOrderId(requested) {
-  let id = cleanString(requested, 100);
-  if (!id) id = makeOrderId();
-  for (let attempt = 0; attempt < 8; attempt++) {
-    if (!(await Order.exists({ orderId: id }))) return id;
-    id = makeOrderId();
-  }
-  throw new Error('Unable to generate a unique order ID. Please try again.');
-}
+async function createUniqueOrderId(requested) { let id = cleanString(requested, 100); if (!id) id = makeOrderId(); for (let attempt = 0; attempt < 8; attempt++) { if (!(await Order.exists({ orderId: id }))) return id; id = makeOrderId(); } throw new Error('Unable to generate a unique order ID. Please try again.'); }
 function buildPaymentUrl(_req, order) { return `${CANONICAL_SITE}/pay.html?order_id=${encodeURIComponent(order.orderId)}`; }
 function buildUpiUrl(order, merchant) { const pa = cleanString(merchant.upiId, 200), pn = cleanString(merchant.name || merchant.provider || 'Merchant', 80), tn = cleanString(order.remark1 || `Payment ${order.orderId}`, 80); return `upi://pay?${new URLSearchParams({ pa, pn, am: Number(order.amount).toFixed(2), tr: order.orderId, cu: 'INR', tn }).toString()}`; }
 function checkoutConfig(merchant) { const c = merchant?.config?.checkout || {}; return { brandName: cleanString(c.brandName || merchant?.name || 'Merchant', 100), themeColor: /^#[0-9a-fA-F]{6}$/.test(c.themeColor || '') ? c.themeColor : '#0B95BD', instructions: cleanString(c.instructions || '', 3000), showQrCode: c.showQrCode !== false, showIntentButtons: c.showIntentButtons !== false, brandLogo: typeof c.brandLogo === 'string' ? c.brandLogo : '' }; }
@@ -42,24 +45,10 @@ router.post('/create-order', requireApiUser, async (req, res, next) => {
     const merchant = await Merchant.findOne(merchantQuery).sort({ createdAt: -1 });
     if (!merchant) return res.status(400).json({ status: false, message: 'No active merchant connection found. Verify the payment UPI first.' });
     if (!merchant.upiId) return res.status(400).json({ status: false, message: 'Merchant UPI ID is not configured' });
-
-    const amountFixed = Number(amount.toFixed(2));
-    let orderId = await createUniqueOrderId(requestedOrderId);
-    const expiresAt = new Date(Date.now() + PAYMENT_LINK_TTL_MS);
-    let order = null;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      try {
-        order = await Order.create({ merchant: merchant._id, owner: req.apiUser._id, orderId, amount: amountFixed, customerMobile, redirectUrl, remark1, remark2, status: 'PENDING', feePercent: Number(merchant.planTransactionFeePercent || 0), feeAmount: 0, netAmount: amountFixed, feeSettlementStatus: 'NOT_APPLICABLE', verificationSource: 'gmail', paymentUrl: buildPaymentUrl(req, { orderId }), expiresAt });
-        break;
-      } catch (error) {
-        if (error?.code === 11000 && attempt < 4) { orderId = makeOrderId(); continue; }
-        throw error;
-      }
-    }
+    const amountFixed = Number(amount.toFixed(2)); let orderId = await createUniqueOrderId(requestedOrderId); const expiresAt = new Date(Date.now() + PAYMENT_LINK_TTL_MS); let order = null;
+    for (let attempt = 0; attempt < 5; attempt++) { try { order = await Order.create({ merchant: merchant._id, owner: req.apiUser._id, orderId, amount: amountFixed, customerMobile, redirectUrl, remark1, remark2, status: 'PENDING', feePercent: Number(merchant.planTransactionFeePercent || 0), feeAmount: 0, netAmount: amountFixed, feeSettlementStatus: 'NOT_APPLICABLE', verificationSource: 'gmail', paymentUrl: buildPaymentUrl(req, { orderId }), expiresAt }); break; } catch (error) { if (error?.code === 11000 && attempt < 4) { orderId = makeOrderId(); continue; } throw error; } }
     if (!order) throw new Error('Unable to create payment order. Please try again.');
-
-    const upiUrl = buildUpiUrl(order, merchant);
-    const qrDataUrl = await QRCode.toDataURL(upiUrl, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
+    const upiUrl = buildUpiUrl(order, merchant); const qrDataUrl = await QRCode.toDataURL(upiUrl, { margin: 1, width: 320, errorCorrectionLevel: 'M' });
     res.status(201).json({ status: true, message: 'Order Created Successfully', result: { txnStatus: 'PENDING', orderId: order.orderId, order_id: order.orderId, amount: order.amount.toFixed(2), paymentUrl: order.paymentUrl, payment_url: order.paymentUrl, qrDataUrl, expiresAt: order.expiresAt, expires_at: order.expiresAt, expiresInSeconds: 300, redirectUrl: order.redirectUrl || null, customerMobile: order.customerMobile || null, remark1: order.remark1 || null, remark2: order.remark2 || null } });
   } catch (error) { next(error); }
 });
@@ -69,19 +58,19 @@ router.post('/check-order-status', requireApiUser, async (req, res, next) => {
     const orderId = cleanString(req.body?.order_id || req.body?.orderId, 100); if (!orderId) return res.status(400).json({ status: false, message: 'order_id is required' });
     let existing = await Order.findOne({ orderId, owner: req.apiUser._id }); if (!existing) return res.status(404).json({ status: false, message: 'Order not found' });
     if (await expireOrderIfNeeded(existing)) existing = await Order.findById(existing._id);
-    if (existing.status === 'PENDING') await verifyPendingOrdersForAdmin(req.apiUser._id).catch(error => console.error('On-demand Gmail verification failed:', error.message));
+    if (existing.status === 'PENDING') await verifyPendingOrdersForAdmin(req.apiUser._id).catch(() => {});
     const order = await Order.findOne({ orderId, owner: req.apiUser._id }).lean();
     res.json({ status: true, message: order.status === 'SUCCESS' ? 'Transaction Successfully' : `Transaction ${order.status}`, result: { txnStatus: order.status, orderId: order.orderId, order_id: order.orderId, amount: Number(order.amount).toFixed(2), date: order.paidAt || order.createdAt, expiresAt: order.expiresAt || null, expires_at: order.expiresAt || null, utr: order.utr || null, customerMobile: order.customerMobile || null, redirectUrl: order.redirectUrl || null, remark1: order.remark1 || null, remark2: order.remark2 || null } });
   } catch (error) { next(error); }
 });
 
-router.get('/payment/:orderId/status', async (req, res, next) => { try { let order = await Order.findOne({ orderId: req.params.orderId }); if (!order) return res.status(404).json({ status: false, message: 'Order not found' }); if (await expireOrderIfNeeded(order)) order = await Order.findById(order._id); if (order.status === 'PENDING') await verifyPendingOrdersForAdmin(order.owner).catch(error => console.error('Public payment Gmail verification failed:', error.message)); order = await Order.findById(order._id); res.set('Cache-Control', 'no-store, max-age=0'); res.json({ status: true, result: { txnStatus: order.status, orderId: order.orderId, amount: Number(order.amount).toFixed(2), expiresAt: order.expiresAt || null, expires_at: order.expiresAt || null, paidAt: order.paidAt || null, utr: order.utr || null, redirectUrl: order.redirectUrl || null } }); } catch (error) { next(error); } });
+router.get('/payment/:orderId/status', async (req, res, next) => { try { let order = await Order.findOne({ orderId: req.params.orderId }); if (!order) return res.status(404).json({ status: false, message: 'Order not found' }); if (await expireOrderIfNeeded(order)) order = await Order.findById(order._id); if (order.status === 'PENDING') await verifyPendingOrdersForAdmin(order.owner).catch(() => {}); order = await Order.findById(order._id); res.set('Cache-Control', 'no-store, max-age=0'); res.json({ status: true, result: { txnStatus: order.status, orderId: order.orderId, amount: Number(order.amount).toFixed(2), expiresAt: order.expiresAt || null, expires_at: order.expiresAt || null, paidAt: order.paidAt || null, utr: order.utr || null, redirectUrl: order.redirectUrl || null } }); } catch (error) { next(error); } });
 
 router.get('/payment/:orderId', async (req, res, next) => {
   try {
     let order = await Order.findOne({ orderId: req.params.orderId }).populate('merchant').lean(); if (!order) return res.status(404).send('<h1>Order not found</h1>');
     if (isExpired(order)) { await Order.updateOne({ _id: order._id, status: 'PENDING' }, { $set: { status: 'EXPIRED' } }); order.status = 'EXPIRED'; }
-    if (order.status === 'SUCCESS') { const redirect = order.redirectUrl ? `<script>location.replace(${JSON.stringify(order.redirectUrl)});</script>` : ''; return res.type('html').send(`<!doctype html><html><body style="font-family:Arial;text-align:center;padding:40px"><h1>Payment Successful</h1><p>Order: ${order.orderId}</p>${redirect}</body></html>`); }
+    if (order.status === 'SUCCESS') { const redirect = order.redirectUrl ? `<script>location.replace(${JSON.stringify(order.redirectUrl)});</script>` : ''; return res.type('html').send(`<!doctype html><html><body style="font-family:Arial;text-align:center;padding:40px"><h1>Payment Successful</h1><p>Order: ${escapeHtml(order.orderId)}</p>${redirect}</body></html>`); }
     if (order.status === 'EXPIRED') return res.type('html').send(`<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><title>Payment Link Expired</title></head><body style="margin:0;background:#f3f6fa;font-family:Arial;color:#172033;display:grid;place-items:center;min-height:100vh;padding:20px"><div style="max-width:430px;width:100%;background:#fff;border-radius:22px;padding:34px 24px;text-align:center;box-shadow:0 12px 35px #17203312"><div style="font-size:48px">⏱️</div><h1 style="margin:12px 0 8px">Payment Link Expired</h1><p style="color:#687384;line-height:1.6">This payment link was valid for 5 minutes and can no longer be used. Please request a new payment link.</p><p style="font-size:12px;color:#9aa3b0">Order: ${escapeHtml(order.orderId)}</p></div></body></html>`);
     const merchant = order.merchant || {}, c = checkoutConfig(merchant), upiUrl = buildUpiUrl(order, merchant), safeUpi = JSON.stringify(upiUrl), qr = c.showQrCode ? await QRCode.toDataURL(upiUrl, { margin: 1, width: 260, errorCorrectionLevel: 'M' }) : '';
     const instructions = c.instructions ? c.instructions.split(/\r?\n/).map(x => x.trim()).filter(Boolean).map(x => `<li>${escapeHtml(x)}</li>`).join('') : '';

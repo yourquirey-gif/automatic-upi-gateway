@@ -23,9 +23,25 @@ const orderSchema = new mongoose.Schema({
   paymentReceipt: { type: mongoose.Schema.Types.ObjectId, ref: 'PaymentReceipt', default: null }
 }, { timestamps: true });
 
-// UTR is assigned only after a payment is verified. Do not make unpaid orders
-// collide on a null/missing UTR value. Only real string UTRs must be unique
-// per merchant.
+// Defense in depth: no code path can transition an expired order to SUCCESS,
+// including a late Gmail verification racing the five-minute deadline.
+orderSchema.pre('save', function(next) {
+  if (this.isModified('status') && this.status === 'SUCCESS' && this.expiresAt && this.expiresAt.getTime() <= Date.now()) {
+    return next(Object.assign(new Error('Payment link has expired and cannot be marked successful.'), { code: 'ORDER_EXPIRED' }));
+  }
+  next();
+});
+
+orderSchema.pre('findOneAndUpdate', function(next) {
+  const update = this.getUpdate() || {};
+  const nextStatus = update.status ?? update.$set?.status;
+  if (nextStatus === 'SUCCESS') {
+    const filter = this.getFilter() || {};
+    this.setQuery({ ...filter, status: 'PENDING', expiresAt: { $gt: new Date() } });
+  }
+  next();
+});
+
 orderSchema.index(
   { merchant: 1, utr: 1 },
   { unique: true, partialFilterExpression: { utr: { $type: 'string' } } }

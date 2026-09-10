@@ -1,0 +1,34 @@
+name: Production Hardening Checks
+on:
+  push:
+    branches: [main, production-hardening-2026-09-10]
+  pull_request:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Backend install
+        run: npm install --no-audit --no-fund
+        working-directory: backend
+      - name: Backend tests
+        run: npm test
+        working-directory: backend
+      - name: Frontend install
+        run: npm install --no-audit --no-fund
+        working-directory: frontend
+      - name: Frontend build
+        run: npm run build
+        working-directory: frontend
+      - name: Admin install
+        run: npm install --no-audit --no-fund
+        working-directory: admin
+      - name: Admin build
+        run: npm run build
+        working-directory: admin

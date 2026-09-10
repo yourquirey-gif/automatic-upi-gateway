@@ -15,7 +15,11 @@ const userSchema = new mongoose.Schema({
   aadhaarNumber: { type: String, trim: true, default: '' },
   location: { type: String, trim: true, default: '' },
   whitelistedIps: { type: [String], default: [] },
+  // Legacy plaintext fields are retained only for backwards-compatible migration.
+  // New credentials use apiTokenHash/apiTokenEncrypted and instanceSecretEncrypted.
   apiToken: { type: String, unique: true, sparse: true, select: false, index: true },
+  apiTokenHash: { type: String, unique: true, sparse: true, select: false, index: true },
+  apiTokenEncrypted: { type: String, default: '', select: false },
   instanceSecret: { type: String, unique: true, sparse: true, select: false },
   omniupiApiEncrypted: { type: String, default: '', select: false },
   instanceSecretEncrypted: { type: String, default: '', select: false },
