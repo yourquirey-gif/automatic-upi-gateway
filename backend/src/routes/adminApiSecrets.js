@@ -1,45 +1,18 @@
 import { Router } from 'express';
 import User from '../models/User.js';
+import WebhookDelivery from '../models/WebhookDelivery.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
-import { decryptSecret } from '../utils/secretBox.js';
+import { newApiToken, newInstanceSecret, hashCredential, encryptCredential, maskCredential } from '../utils/credentialVault.js';
+import { sendTestWebhook } from '../services/merchantWebhook.js';
 
-const router = Router();
-
-router.get('/reveal', requireAuth, requireAdmin, async (req, res, next) => {
-  try {
-    const user = await User.findOne({ _id: req.auth.sub, role: 'admin', status: 'active' })
-      .select('+apiToken +instanceSecret +instanceSecretEncrypted +omniupiApiEncrypted webhookUrl userId');
-    if (!user) return res.status(403).json({ status: false, message: 'Administrator access required' });
-
-    let omniupiApi = String(user.apiToken || '').trim();
-    if (user.omniupiApiEncrypted) {
-      try { omniupiApi = decryptSecret(user.omniupiApiEncrypted); } catch {}
-    }
-
-    let instanceSecret = '';
-    if (user.instanceSecretEncrypted) {
-      try { instanceSecret = decryptSecret(user.instanceSecretEncrypted); } catch {}
-    }
-    if (!instanceSecret) instanceSecret = String(user.instanceSecret || '').trim();
-
-    if (!omniupiApi || !instanceSecret) {
-      return res.status(409).json({ status: false, message: 'Administrator API credentials are not fully configured' });
-    }
-
-    return res.json({
-      status: true,
-      credentials: {
-        userId: user.userId,
-        omniupiApi,
-        instanceSecret,
-        webhookUrl: user.webhookUrl || '',
-        apiBaseUrl: 'https://api.omniupi.in/api',
-        role: 'admin'
-      }
-    });
-  } catch (error) {
-    next(error);
-  }
-});
-
+const router=Router();router.use(requireAuth,requireAdmin);
+async function getAdmin(req){return User.findOne({_id:req.auth.sub,role:'admin',status:'active'}).select('+apiTokenHash +apiTokenEncrypted +apiToken +instanceSecret +instanceSecretEncrypted +omniupiApiEncrypted userId webhookUrl');}
+async function ensure(admin){let changed=false;if(!admin.userId){admin.userId=`ADM_${admin._id.toString().slice(-8)}`;changed=true}if(!admin.apiTokenHash){const token=admin.apiToken||newApiToken();admin.apiTokenHash=hashCredential(token);admin.apiTokenEncrypted=encryptCredential(token);admin.apiToken='';changed=true}if(!admin.instanceSecretEncrypted){const secret=admin.instanceSecret||newInstanceSecret();admin.instanceSecretEncrypted=encryptCredential(secret);admin.instanceSecret='';changed=true}if(changed)await admin.save({validateBeforeSave:false});return admin;}
+function masked(admin){return {userId:admin.userId,apiToken:maskCredential('configured'),instanceSecret:maskCredential('configured'),webhookUrl:admin.webhookUrl||'',apiBaseUrl:'https://api.omniupi.in/api',docsUrl:'https://omniupi.in/docs',role:'admin'};}
+router.get('/credentials',async(req,res,next)=>{try{const admin=await getAdmin(req);if(!admin)return res.status(404).json({status:false,message:'Administrator account not found.'});await ensure(admin);res.json({status:true,credentials:masked(admin)})}catch(e){next(e)}});
+router.post('/credentials/regenerate',async(req,res,next)=>{try{const type=String(req.body?.type||'both').toLowerCase();if(!['token','secret','both'].includes(type))return res.status(400).json({status:false,message:'Invalid credential type.'});const admin=await getAdmin(req);if(!admin)return res.status(404).json({status:false,message:'Administrator account not found.'});await ensure(admin);const credentials={userId:admin.userId};if(type==='token'||type==='both'){const token=newApiToken();admin.apiTokenHash=hashCredential(token);admin.apiTokenEncrypted=encryptCredential(token);admin.apiToken='';credentials.apiToken=token}if(type==='secret'||type==='both'){const secret=newInstanceSecret();admin.instanceSecretEncrypted=encryptCredential(secret);admin.instanceSecret='';credentials.instanceSecret=secret}await admin.save({validateBeforeSave:false});res.json({status:true,message:'Admin API credentials regenerated successfully. New values are shown only once.',credentials})}catch(e){next(e)}});
+router.post('/webhook/test',async(req,res)=>{try{const admin=await getAdmin(req);if(!admin)return res.status(404).json({status:false,message:'Administrator account not found.'});const result=await sendTestWebhook(admin);res.status(result.statusCode&&!result.success?502:200).json({status:result.success,result})}catch(e){res.status(e?.code==='WEBHOOK_URL_MISSING'?400:500).json({status:false,message:e?.code==='WEBHOOK_URL_MISSING'?e.message:'Webhook test could not be completed.'})}});
+router.get('/webhook/logs',async(req,res,next)=>{try{const logs=await WebhookDelivery.find({owner:req.auth.sub}).select('event orderId deliveredAt httpStatus success retryStatus errorReason responseTimeMs').sort({deliveredAt:-1}).limit(100).lean();res.json({status:true,logs})}catch(e){next(e)}});
+// Legacy reveal endpoint is intentionally removed from the normal UI surface. Existing callers should use masked credentials or explicit regeneration.
+router.get('/reveal',async(req,res)=>res.status(410).json({status:false,message:'Credential reveal is no longer supported. Regenerate the credential to receive a new value once.'}));
 export default router;
