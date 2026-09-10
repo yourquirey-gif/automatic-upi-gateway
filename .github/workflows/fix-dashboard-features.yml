@@ -19,6 +19,8 @@ jobs:
         run: |
           python3 <<'PY'
           from pathlib import Path
+
+          # Legacy dashboard wiring: keep the existing feature pages connected.
           p = Path('frontend/src/App.jsx')
           s = p.read_text()
 
@@ -53,16 +55,34 @@ jobs:
           for a, b in replacements.items():
               s = s.replace(a, b, 1)
           p.write_text(s)
+
+          # Premium dashboard is the production /dashboard experience. Reuse the
+          # existing VideoMerchant page instead of creating a second video system.
+          p = Path('frontend/src/PremiumDashboard.jsx')
+          s = p.read_text()
+          import_line = "import {api,logout} from './api';"
+          video_import = "import VideoMerchant from './VideoMerchant.jsx';"
+          if video_import not in s:
+              s = s.replace(import_line, import_line + "\n" + video_import, 1)
+
+          old_page = ":section==='faq'?<Faq/>:<Home account={account} orders={orders} go={go} subscription={subscription}/>"
+          new_page = ":section==='video'?<VideoMerchant/>:section==='faq'?<Faq/>:<Home account={account} orders={orders} go={go} subscription={subscription}/>"
+          s = s.replace(old_page, new_page, 1)
+
+          old_nav = "{item('developers','API & Developers',Code2)}{item('business','Business Profile',UserRound)}<button onClick={()=>{go('legacy:subscription');close?.()}}><CreditCard size={17}/><span>Subscription</span></button><button onClick={()=>{go('legacy:payment-link');close?.()}}><Link2 size={17}/><span>Payment Links</span></button>"
+          new_nav = "{item('developers','API & Developers',Code2)}{item('business','Business Profile',UserRound)}<button onClick={()=>{go('legacy:subscription');close?.()}}><CreditCard size={17}/><span>Subscription</span></button><button onClick={()=>{go('legacy:payment-link');close?.()}}><Link2 size={17}/><span>Payment Links</span></button>{item('video','Video Tutorials',BookOpen)}"
+          s = s.replace(old_nav, new_nav, 1)
+          p.write_text(s)
           PY
 
       - name: Commit patch
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add frontend/src/App.jsx
+          git add frontend/src/App.jsx frontend/src/PremiumDashboard.jsx
           if git diff --cached --quiet; then
             echo 'No dashboard wiring changes needed.'
           else
-            git commit -m 'fix: render real dashboard feature pages'
+            git commit -m 'fix: expose video tutorials in premium dashboard'
             git push
           fi
