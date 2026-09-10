@@ -31,11 +31,13 @@ jobs:
                   raise SystemExit('AdminOperationsCenter import marker not found')
               s = s.replace(marker, marker + "\nimport VideoSettings from './VideoSettings.jsx';", 1)
 
-          pattern = r"function VideosPage\(\{videos,action\}\)\{.*?\n\}"
           replacement = "function VideosPage(){return <VideoSettings onMessage={(msg)=>window.alert(msg)}/>;}"
+          pattern = r"function VideosPage\(\{videos,action\}\)\{.*?(?=function SupportPage)"
           s, n = re.subn(pattern, replacement, s, count=1, flags=re.S)
-          if n != 1:
-              raise SystemExit(f'Expected exactly one VideosPage function, found {n}')
+
+          if n == 0:
+              if replacement not in s:
+                  raise SystemExit('VideosPage component not found; refusing to modify unrelated code')
 
           p.write_text(s)
           PY
