@@ -1,175 +1,27 @@
 import React, { useEffect, useState } from 'react';
-import { Check, Clipboard, Code2, Eye, EyeOff, RefreshCw, ShieldCheck, Webhook, X } from 'lucide-react';
+import { Check, Clipboard, Code2, Eye, EyeOff, RefreshCw, ShieldCheck, Webhook, X, Send } from 'lucide-react';
 import { api } from './api';
 import './api.css';
 
-function mask(value) {
-  if (!value) return '••••••••••••••••••••••••••••••••';
-  return '••••••••••••••••••••••••••••••••';
+function mask(){return '••••••••••••••••••••••••••••••••';}
+export default function ApiPage(){
+ const [credentials,setCredentials]=useState(null),[showToken,setShowToken]=useState(false),[showSecret,setShowSecret]=useState(false),[webhook,setWebhook]=useState(''),[loading,setLoading]=useState(true),[saving,setSaving]=useState(false),[busy,setBusy]=useState(''),[toast,setToast]=useState(null),[confirm,setConfirm]=useState(null),[webhookResult,setWebhookResult]=useState(null),[logs,setLogs]=useState([]),[play,setPlay]=useState({endpoint:'/api/v1/health',method:'GET',body:''}),[playResult,setPlayResult]=useState(null),[playBusy,setPlayBusy]=useState(false);
+ const load=async()=>{try{setLoading(true);const [data,logData]=await Promise.all([api('/account/api'),api('/account/api/webhook/logs')]);setCredentials(data.credentials);setWebhook(data.credentials?.webhookUrl||'');setLogs(logData.logs||[])}catch(e){setToast({type:'error',text:e.message||'Unable to load developer settings'})}finally{setLoading(false)}};
+ useEffect(()=>{load()},[]);
+ const copy=async(value,label)=>{if(!value||String(value).startsWith('••'))return setToast({type:'error',text:'Regenerate this credential to receive a new value before copying.'});try{await navigator.clipboard.writeText(value);setToast({type:'success',text:`${label} copied`})}catch{setToast({type:'error',text:'Copy failed. Please copy manually.'})}};
+ const regenerate=async(type)=>{setConfirm(null);try{setBusy(type);const d=await api('/account/api/regenerate',{method:'POST',body:JSON.stringify({type})});setCredentials(prev=>({...prev,...d.credentials}));setShowToken(type==='token'||type==='both');setShowSecret(type==='secret'||type==='both');setToast({type:'success',text:'New credential generated. Copy it now; it will not be shown again.'})}catch(e){setToast({type:'error',text:e.message||'Unable to regenerate credential'})}finally{setBusy('')}};
+ const saveWebhook=async()=>{const value=webhook.trim();if(value&&!/^https?:\/\//i.test(value))return setToast({type:'error',text:'URL must include http or https'});try{setSaving(true);const d=await api('/account/api/webhook',{method:'PUT',body:JSON.stringify({webhookUrl:value})});setWebhook(d.webhookUrl||'');setToast({type:'success',text:'Webhook URL updated successfully'})}catch(e){setToast({type:'error',text:e.message||'Unable to update webhook'})}finally{setSaving(false)}};
+ const testWebhook=async()=>{try{setBusy('webhook');const d=await api('/account/api/test-webhook',{method:'POST'});setWebhookResult(d.result||d);const l=await api('/account/api/webhook/logs');setLogs(l.logs||[])}catch(e){setWebhookResult({success:false,message:e.message})}finally{setBusy('')}};
+ const runPlayground=async()=>{try{setPlayBusy(true);setPlayResult(null);const path=play.endpoint.trim();if(!/^\/(api\/v1\/)?(health|public-checkout|videos|subscriptions\/plans)$/.test(path.replace(/^\//,''))&&!/^\/api\/v1\/(health|videos|subscriptions\/plans)$/.test(path))throw new Error('Only supported read-only endpoints are available in the playground.');const init={method:play.method,headers:{Accept:'application/json'}};if(play.method!=='GET'&&play.body.trim()){init.headers['Content-Type']='application/json';init.body=play.body}const started=performance.now();const response=await fetch(`${location.origin}${path}`,init).catch(()=>null);if(!response){const r=await fetch(`https://api.omniupi.in${path}`,init);setPlayResult({status:r.status,body:await r.text(),ms:Math.round(performance.now()-started)});return}setPlayResult({status:response.status,body:await response.text(),ms:Math.round(performance.now()-started)})}catch(e){setPlayResult({error:e.message})}finally{setPlayBusy(false)}};
+ if(loading)return <div className="api-page"><div className="api-loading">Loading developer settings…</div></div>;
+ return <div className="api-page"><div className="api-page-head"><div><span className="api-eyebrow">DEVELOPER SETTING</span><h1>API & Developer</h1><p>Manage credentials, test supported endpoints, configure webhooks and review delivery history.</p></div>{credentials?.userId&&<div className="api-user-badge">User ID: <b>{credentials.userId}</b></div>}</div>
+ <CredentialCard title="API Token" description="Used to authenticate your API requests" value={credentials?.apiToken} visible={showToken} onToggle={()=>setShowToken(v=>!v)} onCopy={()=>copy(credentials?.apiToken,'API token')} onRegenerate={()=>setConfirm('token')} busy={busy==='token'} icon={<Code2 size={25}/>}/>
+ <CredentialCard title="Instance Secret" description="Used to verify webhook signatures securely" value={credentials?.instanceSecret} visible={showSecret} onToggle={()=>setShowSecret(v=>!v)} onCopy={()=>copy(credentials?.instanceSecret,'Instance secret')} onRegenerate={()=>setConfirm('secret')} busy={busy==='secret'} icon={<ShieldCheck size={25}/>} warning="Stored encrypted server-side. Existing values are masked; regeneration reveals a new value once."/>
+ <section className="api-card"><div className="api-card-title"><Webhook size={25}/><div><h2>Webhook</h2><p>Configure and test your existing signed webhook endpoint.</p></div></div><label className="api-label">Webhook URL</label><div className="api-input-wrap"><input value={webhook} onChange={e=>setWebhook(e.target.value)} placeholder="https://yourdomain.com/webhook"/></div><div className="api-actions"><button className="api-primary-btn" onClick={saveWebhook} disabled={saving}><Check size={19}/>{saving?'Updating…':'Update Webhook'}</button><button className="api-secondary-btn" onClick={testWebhook} disabled={busy==='webhook'}><Send size={18}/>{busy==='webhook'?'Testing…':'Test Webhook'}</button></div>{webhookResult&&<div className={`api-result ${webhookResult.success?'success':'error'}`}><b>{webhookResult.success?'SUCCESS':'FAILED'}</b> · HTTP {webhookResult.status||webhookResult.statusCode||'—'} · {webhookResult.responseTimeMs??'—'} ms<div>{webhookResult.message||webhookResult.reason||''}</div></div>}</section>
+ <section className="api-card"><div className="api-card-title"><Code2 size={25}/><div><h2>API Test Playground</h2><p>Run supported read-only endpoints without exposing credentials.</p></div></div><div className="play-grid"><label>Endpoint<select value={play.endpoint} onChange={e=>setPlay({...play,endpoint:e.target.value})}><option>/api/v1/health</option><option>/api/v1/videos</option><option>/api/v1/subscriptions/plans</option></select></label><label>HTTP Method<select value={play.method} onChange={e=>setPlay({...play,method:e.target.value})}><option>GET</option></select></label></div><label className="api-label">Request body / parameters</label><textarea value={play.body} onChange={e=>setPlay({...play,body:e.target.value})} placeholder="Optional JSON body"/><button className="api-primary-btn" onClick={runPlayground} disabled={playBusy}>{playBusy?'Testing…':'Send / Test'}</button>{playResult&&<div className="api-play-result"><b>{playResult.error?'ERROR':`HTTP ${playResult.status} · ${playResult.ms} ms`}</b><pre>{playResult.body||playResult.error}</pre></div>}</section>
+ <section className="api-card"><div className="api-card-title"><Webhook size={25}/><div><h2>Webhook Delivery History</h2><p>Sanitized delivery outcomes only; secrets and signatures are never logged.</p></div></div>{logs.length?<div className="webhook-log-list">{logs.map((l,i)=><div className="webhook-log" key={l._id||i}><div><b>{l.event}</b><small>{l.orderId||'—'} · {new Date(l.deliveredAt).toLocaleString('en-IN')}</small></div><div><b>{l.success?'SUCCESS':'FAILED'}</b><small>HTTP {l.httpStatus||'—'} · {l.responseTimeMs??'—'} ms · retry: {l.retryStatus}</small></div><span>{l.errorReason||'Delivered'}</span></div>)}</div>:<div className="api-empty">No webhook deliveries recorded yet.</div>}</section>
+ <section className="api-card security-card"><div className="api-card-title"><ShieldCheck size={25}/><div><h2>Security</h2><p>Credentials are kept server-side and masked in normal responses.</p></div></div><ul><li>Never share API credentials publicly.</li><li>Store integration credentials only on your server.</li><li>Regenerate a credential immediately if compromised.</li><li>Verify webhook signatures using your Instance Secret.</li></ul></section>
+ {toast&&<div className={`api-toast ${toast.type}`} onClick={()=>setToast(null)}>{toast.type==='success'?<Check size={18}/>:<X size={18}/>} {toast.text}</div>}{confirm&&<div className="api-modal-backdrop"><div className="api-modal"><div className="api-modal-icon"><RefreshCw size={25}/></div><h3>Regenerate {confirm==='token'?'API Token':'Instance Secret'}?</h3><p>The current credential will stop working immediately. Update any integration using it.</p><div className="api-modal-actions"><button onClick={()=>setConfirm(null)}>Cancel</button><button className="danger" onClick={()=>regenerate(confirm)}>Regenerate</button></div></div></div>}
+ </div>;
 }
-
-export default function ApiPage() {
-  const [credentials, setCredentials] = useState(null);
-  const [showToken, setShowToken] = useState(false);
-  const [showSecret, setShowSecret] = useState(false);
-  const [webhook, setWebhook] = useState('');
-  const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [busy, setBusy] = useState('');
-  const [toast, setToast] = useState(null);
-  const [confirm, setConfirm] = useState(null);
-
-  const load = async () => {
-    try {
-      setLoading(true);
-      const data = await api('/account/api');
-      setCredentials(data.credentials);
-      setWebhook(data.credentials?.webhookUrl || '');
-    } catch (error) {
-      setToast({ type: 'error', text: error.message || 'Unable to load API credentials' });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const copy = async (value, label) => {
-    try {
-      await navigator.clipboard.writeText(value);
-      setToast({ type: 'success', text: `${label} copied` });
-    } catch {
-      setToast({ type: 'error', text: 'Copy failed. Please copy manually.' });
-    }
-  };
-
-  const regenerate = async (type) => {
-    setConfirm(null);
-    try {
-      setBusy(type);
-      const data = await api('/account/api/regenerate', {
-        method: 'POST',
-        body: JSON.stringify({ type })
-      });
-      setCredentials(prev => ({ ...prev, ...data.credentials }));
-      setToast({ type: 'success', text: data.message });
-    } catch (error) {
-      setToast({ type: 'error', text: error.message || 'Unable to regenerate credential' });
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const saveWebhook = async () => {
-    const value = webhook.trim();
-    if (value && !/^https?:\/\//i.test(value)) {
-      setToast({ type: 'error', text: 'URL must include http or https' });
-      return;
-    }
-    try {
-      setSaving(true);
-      const data = await api('/account/api/webhook', {
-        method: 'PUT',
-        body: JSON.stringify({ webhookUrl: value })
-      });
-      setWebhook(data.webhookUrl || '');
-      setToast({ type: 'success', text: 'Webhook URL updated successfully' });
-    } catch (error) {
-      setToast({ type: 'error', text: error.message || 'Unable to update webhook' });
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (loading) return <div className="api-page"><div className="api-loading">Loading API credentials…</div></div>;
-
-  return (
-    <div className="api-page">
-      <div className="api-page-head">
-        <div>
-          <span className="api-eyebrow">DEVELOPER SETTING</span>
-          <h1>API Details</h1>
-          <p>Use your unique credentials to authenticate API requests and receive transaction updates.</p>
-        </div>
-        {credentials?.userId && <div className="api-user-badge">User ID: <b>{credentials.userId}</b></div>}
-      </div>
-
-      <CredentialCard
-        title="API Token"
-        description="Use this token to authenticate your API requests"
-        value={credentials?.apiToken}
-        visible={showToken}
-        onToggle={() => setShowToken(v => !v)}
-        onCopy={() => copy(credentials?.apiToken, 'API token')}
-        onRegenerate={() => setConfirm('token')}
-        busy={busy === 'token'}
-        icon={<Code2 size={25} />}
-      />
-
-      <CredentialCard
-        title="Instance Secret"
-        description="Used to verify webhook signatures securely"
-        value={credentials?.instanceSecret}
-        visible={showSecret}
-        onToggle={() => setShowSecret(v => !v)}
-        onCopy={() => copy(credentials?.instanceSecret, 'Instance secret')}
-        onRegenerate={() => setConfirm('secret')}
-        busy={busy === 'secret'}
-        icon={<ShieldCheck size={25} />}
-        warning="Keep this secret private. It is required to verify webhook signatures."
-      />
-
-      <section className="api-card">
-        <div className="api-card-title"><Webhook size={25} /><div><h2>Webhook URL</h2><p>Transaction updates will be sent to this URL</p></div></div>
-        <label className="api-label">Webhook URL</label>
-        <div className="api-input-wrap">
-          <input value={webhook} onChange={e => setWebhook(e.target.value)} placeholder="https://yourdomain.com/webhook" />
-          <Eye size={20} />
-        </div>
-        {webhook && !/^https?:\/\//i.test(webhook) && <div className="api-error-text">URL must include http or https</div>}
-        <button className="api-primary-btn" onClick={saveWebhook} disabled={saving}>
-          <Check size={19} /> {saving ? 'Updating…' : 'Update Webhook'}
-        </button>
-      </section>
-
-      <section className="api-card security-card">
-        <div className="api-card-title"><ShieldCheck size={25} /><div><h2>API Security Instructions</h2><p>Keep your API credentials safe and secure</p></div></div>
-        <ul>
-          <li>👉 Never share your API token publicly.</li>
-          <li>👉 Store credentials securely on server side.</li>
-          <li>👉 Rotate API keys periodically.</li>
-          <li>👉 Verify webhook signatures using your Instance Secret.</li>
-          <li>👉 Contact support if suspicious activity is detected.</li>
-        </ul>
-      </section>
-
-      {toast && <div className={`api-toast ${toast.type}`} onClick={() => setToast(null)}>{toast.type === 'success' ? <Check size={18} /> : <X size={18} />}{toast.text}</div>}
-
-      {confirm && <div className="api-modal-backdrop">
-        <div className="api-modal">
-          <div className="api-modal-icon"><RefreshCw size={25} /></div>
-          <h3>{confirm === 'token' ? 'Regenerate API Token?' : 'Regenerate Instance Secret?'}</h3>
-          <p>The current {confirm === 'token' ? 'API token' : 'Instance Secret'} will stop working immediately. Any integration using it must be updated.</p>
-          <div className="api-modal-actions">
-            <button onClick={() => setConfirm(null)}>Cancel</button>
-            <button className="danger" onClick={() => regenerate(confirm)}>Regenerate</button>
-          </div>
-        </div>
-      </div>}
-    </div>
-  );
-}
-
-function CredentialCard({ title, description, value, visible, onToggle, onCopy, onRegenerate, busy, icon, warning }) {
-  return <section className="api-card">
-    <div className="api-card-title">{icon}<div><h2>{title}</h2><p>{description}</p></div></div>
-    <label className="api-label">Your {title}</label>
-    <div className="credential-row">
-      <div className="credential-value">{visible ? value : mask(value)}</div>
-      <button title={visible ? 'Hide' : 'Show'} onClick={onToggle}>{visible ? <EyeOff size={22} /> : <Eye size={22} />}</button>
-      <button title="Copy" onClick={onCopy}><Clipboard size={22} /></button>
-      <button className="regen" title="Regenerate" onClick={onRegenerate} disabled={busy}><RefreshCw size={21} className={busy ? 'spin' : ''} /></button>
-    </div>
-    {warning && <div className="api-warning">{warning}</div>}
-  </section>;
-}
+function CredentialCard({title,description,value,visible,onToggle,onCopy,onRegenerate,busy,icon,warning}){return <section className="api-card"><div className="api-card-title">{icon}<div><h2>{title}</h2><p>{description}</p></div></div><label className="api-label">Your {title}</label><div className="credential-row"><div className="credential-value">{visible&&!String(value||'').startsWith('••')?value:mask()}</div><button title={visible?'Hide':'Show'} onClick={onToggle}>{visible?<EyeOff size={22}/>:<Eye size={22}/>}</button><button title="Copy" onClick={onCopy}><Clipboard size={22}/></button><button className="regen" title="Regenerate" onClick={onRegenerate} disabled={busy}><RefreshCw size={21} className={busy?'spin':''}/></button></div>{warning&&<div className="api-warning">{warning}</div>}</section>}
