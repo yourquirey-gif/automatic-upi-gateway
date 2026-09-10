@@ -72,6 +72,13 @@ jobs:
           old_nav = "{item('developers','API & Developers',Code2)}{item('business','Business Profile',UserRound)}<button onClick={()=>{go('legacy:subscription');close?.()}}><CreditCard size={17}/><span>Subscription</span></button><button onClick={()=>{go('legacy:payment-link');close?.()}}><Link2 size={17}/><span>Payment Links</span></button>"
           new_nav = "{item('developers','API & Developers',Code2)}{item('business','Business Profile',UserRound)}<button onClick={()=>{go('legacy:subscription');close?.()}}><CreditCard size={17}/><span>Subscription</span></button><button onClick={()=>{go('legacy:payment-link');close?.()}}><Link2 size={17}/><span>Payment Links</span></button>{item('video','Video Tutorials',BookOpen)}"
           s = s.replace(old_nav, new_nav, 1)
+
+          # Remove accidental duplicate video navigation/page branches while
+          # preserving exactly one existing VideoMerchant integration.
+          duplicate_nav = "{item('video','Video Tutorials',BookOpen)}{item('video','Video Tutorials',BookOpen)}{item('video','Video Tutorials',BookOpen)}"
+          s = s.replace(duplicate_nav, "{item('video','Video Tutorials',BookOpen)}")
+          s = s.replace(":section==='video'?<VideoMerchant/>:section==='video'?<VideoMerchant/>:section==='video'?<VideoMerchant/>:", ":section==='video'?<VideoMerchant/>:")
+
           p.write_text(s)
           PY
 
