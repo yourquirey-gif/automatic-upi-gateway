@@ -1,0 +1,70 @@
+name: Fix dashboard feature wiring
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  wire-features:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Wire existing feature components into dashboard
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('frontend/src/App.jsx')
+          s = p.read_text()
+
+          old_import = "import {login,logout,register} from './api';"
+          new_import = """import {login,logout,register} from './api';
+import Transactions from './Transactions.jsx';
+import SubscriptionPage from './SubscriptionPage.jsx';
+import AccountPage from './AccountPage.jsx';
+import PasswordPage from './PasswordPage.jsx';
+import KycPage from './KycPage.jsx';
+import ApiPage from './ApiPage.jsx';
+import MerchantApkPage from './MerchantApkPage.jsx';
+import VideoMerchant from './VideoMerchant.jsx';
+import Documentation from './Documentation.jsx';
+import SupportTicketPage from './SupportTicketPage.jsx';
+import FaqPage from './FaqPage.jsx';"""
+          if old_import in s and "import ApiPage from './ApiPage.jsx';" not in s:
+              s = s.replace(old_import, new_import, 1)
+
+          replacements = {
+            "{page==='transactions'&&<SimplePage icon={TrendingUp} title=\"Transactions\" text=\"Your transaction history will appear here.\"/>}": "{page==='transactions'&&<Transactions onBack={()=>openPage('home')}/>}",
+            "{page==='checkout'&&<SimplePage icon={Pencil} title=\"Edit Checkout Page\" text=\"Customize your customer checkout experience here.\"/>}": "{page==='checkout'&&<SimplePage icon={Pencil} title=\"Edit Checkout Page\" text=\"Customize your customer checkout experience here.\"/>}",
+            "{page==='subscription'&&<SimplePage icon={CreditCard} title=\"Subscription\" text=\"Manage your subscription here.\"/>}": "{page==='subscription'&&<SubscriptionPage/>}",
+            "{page==='account'&&<SimplePage icon={UserRound} title=\"Account & IP Whitelist\" text=\"Manage account access and approved IP addresses.\"/>}": "{page==='account'&&<AccountPage/>}",
+            "{page==='password'&&<SimplePage icon={KeyRound} title=\"Change Password\" text=\"Change your dashboard password securely.\"/>}": "{page==='password'&&<PasswordPage/>}",
+            "{page==='api'&&<SimplePage icon={Code2} title=\"API Details\" text=\"Your API credentials will appear here.\"/>}": "{page==='api'&&<ApiPage/>}",
+            "{page==='apk'&&<SimplePage icon={Download} title=\"Merchant APK\" text=\"Merchant application downloads will appear here.\"/>}": "{page==='apk'&&<MerchantApkPage/>}",
+            "{page==='video'&&<SimplePage icon={ExternalLink} title=\"Video For Merchant\" text=\"Merchant setup videos will appear here.\"/>}": "{page==='video'&&<VideoMerchant/>}",
+            "{page==='docs'&&<SimplePage icon={FileText} title=\"Documentation\" text=\"API and integration documentation will appear here.\"/>}": "{page==='docs'&&<Documentation/>}",
+            "{page==='support'&&<SimplePage icon={MessageSquare} title=\"Support Ticket\" text=\"Create and manage support tickets here.\"/>}": "{page==='support'&&<SupportTicketPage/>}",
+            "{page==='faq'&&<SimplePage icon={HelpCircle} title=\"FAQ\" text=\"Frequently asked questions will appear here.\"/>}": "{page==='faq'&&<FaqPage/>}",
+          }
+          for a,b in replacements.items():
+              if a in s:
+                  s = s.replace(a,b,1)
+
+          p.write_text(s)
+
+      - name: Commit patch
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add frontend/src/App.jsx
+          if git diff --cached --quiet; then
+            echo 'No dashboard wiring changes needed.'
+          else
+            git commit -m 'fix: render real dashboard feature pages'
+            git push
+          fi
